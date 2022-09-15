@@ -78,7 +78,8 @@ export const getConnectedCalendars = async (
   return connectedCalendars;
 };
 
-const CACHING_TIME = 30_000; // 30 seconds
+// const CACHING_TIME = 30_000; // 30 seconds
+const CACHING_TIME = 1; // 30 seconds
 
 const getCachedResults = async (
   withCredentials: Credential[],

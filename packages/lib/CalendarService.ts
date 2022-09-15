@@ -54,6 +54,7 @@ export default abstract class BaseCalendarService implements Calendar {
   private url = "";
   private credentials: Record<string, string> = {};
   private headers: Record<string, string> = {};
+  private account?: DAVAccount;
   protected integrationName = "";
   private log: typeof logger;
 
@@ -69,7 +70,8 @@ export default abstract class BaseCalendarService implements Calendar {
     this.url = url || credentialURL;
 
     this.credentials = { username, password };
-    this.headers = getBasicAuthHeaders({ username, password });
+    // this.headers = getBasicAuthHeaders({ username, password });
+    this.headers = {};
 
     this.log = logger.getChildLogger({ prefix: [`[[lib] ${this.integrationName}`] });
   }
@@ -85,7 +87,8 @@ export default abstract class BaseCalendarService implements Calendar {
         uid,
         startInputType: "utc",
         start: convertDate(event.startTime),
-        duration: getDuration(event.startTime, event.endTime),
+        end: convertDate(event.endTime),
+        // duration: getDuration(event.startTime, event.endTime),
         title: event.title,
         description: getRichDescription(event),
         location: getLocation(event),
@@ -119,6 +122,7 @@ export default abstract class BaseCalendarService implements Calendar {
               // according to https://datatracker.ietf.org/doc/html/rfc4791#section-4.1, Calendar object resources contained in calendar collections MUST NOT specify the iCalendar METHOD property.
               iCalString: iCalString.replace(/METHOD:[^\r\n]+\r\n/g, ""),
               headers: this.headers,
+              account: this.account,
             })
           )
       );
@@ -149,6 +153,9 @@ export default abstract class BaseCalendarService implements Calendar {
     event: CalendarEvent
   ): Promise<NewCalendarEventType | NewCalendarEventType[]> {
     try {
+      const account = this.account ? this.account : await this.getAccount();
+      this.account = account;
+
       const events = await this.getEventsByUID(uid);
 
       /** We generate the ICS files */
@@ -156,7 +163,8 @@ export default abstract class BaseCalendarService implements Calendar {
         uid,
         startInputType: "utc",
         start: convertDate(event.startTime),
-        duration: getDuration(event.startTime, event.endTime),
+        end: convertDate(event.endTime),
+        // duration: getDuration(event.startTime, event.endTime),
         title: event.title,
         description: getRichDescription(event),
         location: getLocation(event),
@@ -187,6 +195,7 @@ export default abstract class BaseCalendarService implements Calendar {
               etag: e?.etag,
             },
             headers: this.headers,
+            account: this.account,
           });
         })
       ).then((p) => p.map((r) => r.json() as unknown as NewCalendarEventType));
@@ -199,6 +208,9 @@ export default abstract class BaseCalendarService implements Calendar {
 
   async deleteEvent(uid: string): Promise<void> {
     try {
+      const account = this.account ? this.account : await this.getAccount();
+      this.account = account;
+
       const events = await this.getEventsByUID(uid);
 
       const eventsToDelete = events.filter((event) => event.uid === uid);
@@ -211,6 +223,7 @@ export default abstract class BaseCalendarService implements Calendar {
               etag: event?.etag,
             },
             headers: this.headers,
+            account: this.account,
           });
         })
       );
@@ -226,6 +239,9 @@ export default abstract class BaseCalendarService implements Calendar {
     dateTo: string,
     selectedCalendars: IntegrationCalendar[]
   ): Promise<EventBusyDate[]> {
+    const account = this.account ? this.account : await this.getAccount();
+    this.account = account;
+
     const objects = (
       await Promise.all(
         selectedCalendars
@@ -236,6 +252,7 @@ export default abstract class BaseCalendarService implements Calendar {
                 url: sc.externalId,
               },
               headers: this.headers,
+              account: this.account,
               expand: true,
               timeRange: {
                 start: new Date(dateFrom).toISOString(),
@@ -331,10 +348,11 @@ export default abstract class BaseCalendarService implements Calendar {
   async listCalendars(event?: CalendarEvent): Promise<IntegrationCalendar[]> {
     try {
       const account = await this.getAccount();
+      this.account = account;
 
       const calendars = await fetchCalendars({
-        account,
         headers: this.headers,
+        account: account,
       });
 
       return calendars.reduce<IntegrationCalendar[]>((newCalendars, calendar) => {
@@ -364,6 +382,9 @@ export default abstract class BaseCalendarService implements Calendar {
     objectUrls?: string[] | null
   ) {
     try {
+      const account = this.account ? this.account : await this.getAccount();
+      this.account = account;
+
       const objects = await fetchCalendarObjects({
         calendar: {
           url: calId,
@@ -377,6 +398,7 @@ export default abstract class BaseCalendarService implements Calendar {
               }
             : undefined,
         headers: this.headers,
+        account: this.account,
       });
 
       const events = objects

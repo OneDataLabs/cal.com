@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-empty-function */
 import autoAnimate from "@formkit/auto-animate";
 import { EventTypeCustomInput, PeriodType, Prisma, SchedulingType } from "@prisma/client";
 import { GetServerSidePropsContext } from "next";
@@ -17,7 +18,7 @@ import prisma from "@calcom/prisma";
 import { trpc } from "@calcom/trpc/react";
 import type { RecurringEvent } from "@calcom/types/Calendar";
 import { Form } from "@calcom/ui/form/fields";
-import { Button, showToast } from "@calcom/ui/v2";
+import { showToast } from "@calcom/ui/v2";
 
 import { asStringOrThrow } from "@lib/asStringOrNull";
 import { getSession } from "@lib/auth";
@@ -36,8 +37,6 @@ import { EventTypeSingleLayout } from "@components/v2/eventtype/EventTypeSingleL
 import EventWorkflowsTab from "@components/v2/eventtype/EventWorkfowsTab";
 
 import { getTranslation } from "@server/lib/i18n";
-
-const TABS_WITHOUT_ACTION_BUTTONS = ["workflows", "availability"];
 
 export type FormValues = {
   title: string;
@@ -71,6 +70,7 @@ export type FormValues = {
   periodCountCalendarDays: "1" | "0";
   periodDates: { startDate: Date; endDate: Date };
   seatsPerTimeSlot: number | null;
+  seatsPerTimeSlotEnabled: boolean;
   minimumBookingNotice: number;
   beforeBufferTime: number;
   afterBufferTime: number;
@@ -97,7 +97,8 @@ export type EventTypeSetupInfered = inferSSRProps<typeof getServerSideProps>;
 const EventTypePage = (props: inferSSRProps<typeof getServerSideProps>) => {
   const { t } = useLocale();
 
-  const { eventType, locationOptions, team, teamMembers } = props;
+  const { eventType: dbEventType, locationOptions, team, teamMembers } = props;
+  const [eventType, setEventType] = useState(dbEventType);
   const animationParentRef = useRef(null);
   const router = useRouter();
   const { tabName } = querySchema.parse(router.query);
@@ -107,7 +108,8 @@ const EventTypePage = (props: inferSSRProps<typeof getServerSideProps>) => {
   }, [animationParentRef]);
 
   const updateMutation = trpc.useMutation("viewer.eventTypes.update", {
-    onSuccess: async ({ eventType }) => {
+    onSuccess: async ({ eventType: newEventType }) => {
+      setEventType({ ...eventType, slug: newEventType.slug });
       showToast(
         t("event_type_updated_successfully", {
           eventTypeTitle: eventType.title,
@@ -154,6 +156,7 @@ const EventTypePage = (props: inferSSRProps<typeof getServerSideProps>) => {
         endDate: periodDates.endDate,
       },
       schedulingType: eventType.schedulingType,
+      minimumBookingNotice: eventType.minimumBookingNotice,
     },
   });
 
@@ -221,6 +224,9 @@ const EventTypePage = (props: inferSSRProps<typeof getServerSideProps>) => {
             locations,
             blockchainId,
             smartContractAddress,
+            // We don't need to send it to the backend
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            seatsPerTimeSlotEnabled,
             ...input
           } = values;
 
@@ -245,16 +251,6 @@ const EventTypePage = (props: inferSSRProps<typeof getServerSideProps>) => {
         <div ref={animationParentRef} className="space-y-6">
           {tabMap[tabName]}
         </div>
-        {!TABS_WITHOUT_ACTION_BUTTONS.includes(tabName) && (
-          <div className="mt-4 flex justify-end space-x-2 rtl:space-x-reverse">
-            <Button href="/event-types" color="secondary" tabIndex={-1}>
-              {t("cancel")}
-            </Button>
-            <Button type="submit" data-testid="update-eventtype" disabled={updateMutation.isLoading}>
-              {t("update")}
-            </Button>
-          </div>
-        )}
       </Form>
     </EventTypeSingleLayout>
   );

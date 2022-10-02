@@ -17,14 +17,15 @@ const V2_WHITELIST = [
   "/event-types",
   "/workflows",
   "/apps",
+  "/teams",
   "/success",
   "/auth/login",
 ];
-const V2_BLACKLIST = [
-  //
-  "/apps/routing_forms",
-  "/apps/installed",
-];
+
+// For pages
+// - which has V1 versions being modified as V2
+// - Add routing_forms to keep old links working
+const V2_BLACKLIST = ["/apps/routing_forms/", "/apps/routing-forms/", "/apps/typeform/"];
 
 const middleware: NextMiddleware = async (req) => {
   const url = req.nextUrl;
@@ -43,11 +44,15 @@ const middleware: NextMiddleware = async (req) => {
       return NextResponse.redirect(req.nextUrl);
     }
   }
-  /** Display available V2 pages to users who opted-in to early access */
+
+  // Don't 404 old routing_forms links
+  if (url.pathname.startsWith("/apps/routing_forms")) {
+    url.pathname = url.pathname.replace("/apps/routing_forms", "/apps/routing-forms");
+    return NextResponse.rewrite(url);
+  }
+
+  /** Display available V2 pages */
   if (
-    // ⬇ TODO: Remove this line for V2 launch
-    req.cookies.has("calcom-v2-early-access") &&
-    // ⬆ TODO: Remove this line for V2 launch
     !V2_BLACKLIST.some((p) => url.pathname.startsWith(p)) &&
     V2_WHITELIST.some((p) => url.pathname.startsWith(p))
   ) {
@@ -55,6 +60,7 @@ const middleware: NextMiddleware = async (req) => {
     url.pathname = `/v2${url.pathname}`;
     return NextResponse.rewrite(url);
   }
+
   return NextResponse.next();
 };
 

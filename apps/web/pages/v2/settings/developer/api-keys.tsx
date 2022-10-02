@@ -7,10 +7,10 @@ import ApiKeyListItem from "@calcom/features/ee/api-keys/components/v2/ApiKeyLis
 import { useLocale } from "@calcom/lib/hooks/useLocale";
 import { trpc } from "@calcom/trpc/react";
 import { Icon } from "@calcom/ui";
-import SkeletonLoader from "@calcom/ui/apps/SkeletonLoader";
 import { EmptyScreen, Button } from "@calcom/ui/v2";
 import { Dialog, DialogContent } from "@calcom/ui/v2/core/Dialog";
 import Meta from "@calcom/ui/v2/core/Meta";
+import SkeletonLoader from "@calcom/ui/v2/core/apps/SkeletonLoader";
 import { getLayout } from "@calcom/ui/v2/core/layouts/SettingsLayout";
 
 const ApiKeysView = () => {
@@ -39,16 +39,16 @@ const ApiKeysView = () => {
 
   return (
     <>
-      <Meta title="api_keys" description="webhooks_description" />
+      <Meta title="API Keys" description="API keys allow other apps to communicate with Cal.com" />
 
       <LicenseRequired>
         <>
           {isLoading && <SkeletonLoader />}
           <div>
-            {data?.length ? (
+            {isLoading ? null : data?.length ? (
               <>
                 <div className="mt-6 mb-8 rounded-md border">
-                  {data?.map((apiKey, index) => (
+                  {data.map((apiKey, index) => (
                     <ApiKeyListItem
                       key={apiKey.id}
                       apiKey={apiKey}

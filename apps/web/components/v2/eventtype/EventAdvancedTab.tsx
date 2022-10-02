@@ -19,6 +19,7 @@ import {
   DialogContent,
   Label,
   showToast,
+  Skeleton,
   Switch,
   TextField,
   Tooltip,
@@ -37,10 +38,10 @@ export const EventAdvancedTab = ({ eventType, team }: Pick<EventTypeSetupInfered
   const connectedCalendarsQuery = trpc.useQuery(["viewer.connectedCalendars"]);
   const formMethods = useFormContext<FormValues>();
   const { t } = useLocale();
-  const utils = trpc.useContext();
   const [showEventNameTip, setShowEventNameTip] = useState(false);
   const [hashedLinkVisible, setHashedLinkVisible] = useState(!!eventType.hashedLink);
   const [hashedUrl, setHashedUrl] = useState(eventType.hashedLink?.link);
+  const [seatsInputVisible, setSeatsInputVisible] = useState(!!eventType.seatsPerTimeSlot);
   const [customInputs, setCustomInputs] = useState<EventTypeCustomInput[]>(
     eventType.customInputs.sort((a, b) => a.id - b.id) || []
   );
@@ -49,7 +50,7 @@ export const EventAdvancedTab = ({ eventType, team }: Pick<EventTypeSetupInfered
   const placeholderHashedLink = `${CAL_URL}/d/${hashedUrl}/${eventType.slug}`;
 
   const animationRef = useRef(null);
-  const seatsEnabled = !!eventType.seatsPerTimeSlot;
+  const seatsEnabled = formMethods.getValues("seatsPerTimeSlotEnabled");
 
   useEffect(() => {
     animationRef.current && autoAnimate(animationRef.current);
@@ -136,8 +137,12 @@ export const EventAdvancedTab = ({ eventType, team }: Pick<EventTypeSetupInfered
             }}
           />
           <div className="flex flex-col">
-            <Label className="text-sm font-semibold leading-none text-black">{t("additional_inputs")}</Label>
-            <p className="-mt-2 text-sm leading-normal text-gray-600">{t("additional_input_description")}</p>
+            <Skeleton as={Label} className="text-sm font-semibold leading-none text-black">
+              {t("additional_inputs")}
+            </Skeleton>
+            <Skeleton as="p" className="-mt-2 text-sm leading-normal text-gray-600">
+              {t("additional_input_description")}
+            </Skeleton>
           </div>
         </div>
         <ul className="my-4" ref={animationRef}>
@@ -182,12 +187,12 @@ export const EventAdvancedTab = ({ eventType, team }: Pick<EventTypeSetupInfered
               fitToHeight={true}
             />
             <div className="flex flex-col">
-              <Label className="text-sm font-semibold leading-none text-black">
+              <Skeleton as={Label} className="text-sm font-semibold leading-none text-black">
                 {t("requires_confirmation")}
-              </Label>
-              <p className="-mt-2 text-sm leading-normal text-gray-600">
+              </Skeleton>
+              <Skeleton as="p" className="-mt-2 text-sm leading-normal text-gray-600">
                 {t("requires_confirmation_description")}
-              </p>
+              </Skeleton>
             </div>
           </div>
         )}
@@ -207,8 +212,12 @@ export const EventAdvancedTab = ({ eventType, team }: Pick<EventTypeSetupInfered
               disabled={seatsEnabled}
             />
             <div className="flex flex-col">
-              <Label className="text-sm font-semibold leading-none text-black">{t("disable_guests")}</Label>
-              <p className="-mt-2 text-sm leading-normal text-gray-600">{t("disable_guests_description")}</p>
+              <Skeleton as={Label} className="text-sm font-semibold leading-none text-black">
+                {t("disable_guests")}
+              </Skeleton>
+              <Skeleton as="p" className="-mt-2 text-sm leading-normal text-gray-600">
+                {t("disable_guests_description")}
+              </Skeleton>
             </div>
           </div>
         )}
@@ -228,8 +237,12 @@ export const EventAdvancedTab = ({ eventType, team }: Pick<EventTypeSetupInfered
               onCheckedChange={(e) => onChange(e)}
             />
             <div className="flex flex-col">
-              <Label className="text-sm font-semibold leading-none text-black">{t("disable_notes")}</Label>
-              <p className="-mt-2 text-sm leading-normal text-gray-600">{t("disable_notes_description")}</p>
+              <Skeleton as={Label} className="text-sm font-semibold leading-none text-black">
+                {t("disable_notes")}
+              </Skeleton>
+              <Skeleton as="p" className="-mt-2 text-sm leading-normal text-gray-600">
+                {t("disable_notes_description")}
+              </Skeleton>
             </div>
           </div>
         )}
@@ -243,6 +256,7 @@ export const EventAdvancedTab = ({ eventType, team }: Pick<EventTypeSetupInfered
           <>
             <div className="flex space-x-3 ">
               <Switch
+                data-testid="hashedLinkCheck"
                 name="hashedLinkCheck"
                 fitToHeight={true}
                 defaultChecked={!!value}
@@ -252,8 +266,12 @@ export const EventAdvancedTab = ({ eventType, team }: Pick<EventTypeSetupInfered
                 }}
               />
               <div className="flex flex-col">
-                <Label className="text-sm font-semibold leading-none text-black">{t("private_link")}</Label>
-                <p className="-mt-2 text-sm leading-normal text-gray-600">{t("private_link_description")}</p>
+                <Skeleton as={Label} className="text-sm font-semibold leading-none text-black">
+                  {t("private_link")}
+                </Skeleton>
+                <Skeleton as="p" className="-mt-2 text-sm leading-normal text-gray-600">
+                  {t("private_link_description")}
+                </Skeleton>
               </div>
             </div>
 
@@ -292,6 +310,59 @@ export const EventAdvancedTab = ({ eventType, team }: Pick<EventTypeSetupInfered
           </>
         )}
       />
+      <hr />
+      <Controller
+        name="seatsPerTimeSlotEnabled"
+        control={formMethods.control}
+        defaultValue={!!eventType.seatsPerTimeSlot}
+        render={({ field: { value, onChange } }) => (
+          <div className="flex space-x-3">
+            <Switch
+              name="seatsPerTimeSlotEnabled"
+              checked={value}
+              onCheckedChange={(e) => {
+                setSeatsInputVisible(e);
+                // Enabling seats will disable guests and requiring confimation until fully supported
+                if (e) {
+                  formMethods.setValue("disableGuests", true);
+                  formMethods.setValue("requiresConfirmation", false);
+                  formMethods.setValue("seatsPerTimeSlot", 2);
+                } else {
+                  formMethods.setValue("seatsPerTimeSlot", null);
+                }
+                onChange(e);
+              }}
+              fitToHeight={true}
+            />
+            <div className="flex flex-col">
+              <Label className="text-sm font-semibold leading-none text-black">{t("offer_seats")}</Label>
+              <p className="-mt-2 text-sm leading-normal text-gray-600">{t("offer_seats_description")}</p>
+            </div>
+          </div>
+        )}
+      />
+      {seatsInputVisible && (
+        <Controller
+          name="seatsPerTimeSlot"
+          control={formMethods.control}
+          defaultValue={eventType.seatsPerTimeSlot}
+          render={({ field: { value, onChange } }) => (
+            <div className="">
+              <TextField
+                required
+                name="seatsPerTimeSlot"
+                label={t("number_of_seats")}
+                type="number"
+                defaultValue={value || 2}
+                addOnSuffix={<>{t("seats")}</>}
+                onChange={(e) => {
+                  onChange(Number(e.target.value));
+                }}
+              />
+            </div>
+          )}
+        />
+      )}
       {showEventNameTip && (
         <Dialog open={showEventNameTip} onOpenChange={setShowEventNameTip}>
           <DialogContent

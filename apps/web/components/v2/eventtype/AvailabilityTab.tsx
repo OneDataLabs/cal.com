@@ -11,7 +11,7 @@ import Button from "@calcom/ui/v2/core/Button";
 import Select from "@calcom/ui/v2/core/form/Select";
 import { SkeletonText } from "@calcom/ui/v2/core/skeleton";
 
-import { AvailabilitySelectSkeletonLoader } from "@components/availability/SkeletonLoader";
+import { SelectSkeletonLoader } from "@components/v2/availability/SkeletonLoader";
 
 type AvailabilityOption = {
   label: string;
@@ -30,7 +30,7 @@ const AvailabilitySelect = ({
 }) => {
   const { data, isLoading } = trpc.useQuery(["viewer.availability.list"]);
   if (isLoading) {
-    return <AvailabilitySelectSkeletonLoader />;
+    return <SelectSkeletonLoader />;
   }
 
   const schedules = data?.schedules || [];
@@ -117,7 +117,7 @@ export const AvailabilityTab = () => {
                     ))}
                   </div>
                 ) : (
-                  <span className=" text-gray-500 opacity-50">{t("unavailable")}</span>
+                  <span className="text-gray-500 opacity-50 ">{t("unavailable")}</span>
                 )}
               </li>
             );

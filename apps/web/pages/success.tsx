@@ -140,6 +140,7 @@ type SuccessProps = inferSSRProps<typeof getServerSideProps>;
 export default function Success(props: SuccessProps) {
   const { t } = useLocale();
   const router = useRouter();
+
   const { location: _location, name, reschedule, listingStatus, status, isSuccessBookingPage } = router.query;
   const location: ReturnType<typeof getEventLocationValue> = Array.isArray(_location)
     ? _location[0] || ""

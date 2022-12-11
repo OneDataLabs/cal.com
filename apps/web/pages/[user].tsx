@@ -284,9 +284,11 @@ export const getServerSideProps = async (context: GetServerSidePropsContext) => 
   const isDynamicGroup = users.length > 1;
 
   const dynamicNames = isDynamicGroup
-    ? users.map((user) => {
-        return user.name || "";
-      })
+    ? users
+        .sort((a, b) => usernameList.indexOf(b.username) - usernameList.indexOf(a.username))
+        .map((user) => {
+          return user.name || "";
+        })
     : [];
   const [user] = users; //to be used when dealing with single user, not dynamic group
 
@@ -324,9 +326,11 @@ export const getServerSideProps = async (context: GetServerSidePropsContext) => 
 
   const isSingleUser = users.length === 1;
   const dynamicUsernames = isDynamicGroup
-    ? users.map((user) => {
-        return user.username || "";
-      })
+    ? users
+        .sort((a, b) => usernameList.indexOf(b.username) - usernameList.indexOf(a.username))
+        .map((user) => {
+          return user.username || "";
+        })
     : [];
 
   return {

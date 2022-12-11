@@ -64,7 +64,8 @@ export default class AttendeeScheduledEmail extends BaseEmail {
         content: this.getiCalEventAsString(),
       },
       to: `${this.attendee.name} <${this.attendee.email}>`,
-      from: `${this.calEvent.organizer.name} <${this.getMailerOptions().from}>`,
+      from: `ODL Bookings <${this.getMailerOptions().from}>`,
+      // from: `${this.calEvent.organizer.name} <${this.getMailerOptions().from}>`,
       replyTo: [...this.calEvent.attendees.map(({ email }) => email), this.calEvent.organizer.email],
       subject: `${this.t("confirmed_event_type_subject", {
         eventType: this.calEvent.type,

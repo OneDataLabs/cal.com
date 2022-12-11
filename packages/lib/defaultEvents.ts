@@ -1,7 +1,6 @@
 import type { EventTypeCustomInput } from "@prisma/client";
 import { PeriodType, Prisma, SchedulingType, UserPlan } from "@prisma/client";
 
-import { DailyLocationType } from "@calcom/app-store/locations";
 import { userSelect } from "@calcom/prisma/selects";
 
 type User = Prisma.UserGetPayload<typeof userSelect>;
@@ -60,7 +59,7 @@ const commons = {
   periodType: PeriodType.UNLIMITED,
   periodDays: null,
   slotInterval: null,
-  locations: [{ type: DailyLocationType }],
+  locations: [],
   customInputs,
   disableGuests: true,
   minimumBookingNotice: 120,
@@ -91,9 +90,9 @@ const min15Event = {
   length: 15,
   slug: "15",
   title: "15min",
-  eventName: "Dynamic Collective 15min Event",
-  description: "Dynamic Collective 15min Event",
-  descriptionAsSafeHTML: "Dynamic Collective 15min Event",
+  eventName: "Collective 15min Event",
+  description: "Collective 15min Event",
+  descriptionAsSafeHTML: "Collective 15min Event",
   position: 0,
   ...commons,
 };
@@ -101,9 +100,9 @@ const min30Event = {
   length: 30,
   slug: "30",
   title: "30min",
-  eventName: "Dynamic Collective 30min Event",
-  description: "Dynamic Collective 30min Event",
-  descriptionAsSafeHTML: "Dynamic Collective 30min Event",
+  eventName: "Collective 30min Event",
+  description: "Collective 30min Event",
+  descriptionAsSafeHTML: "Collective 30min Event",
   position: 1,
   ...commons,
 };
@@ -111,9 +110,9 @@ const min60Event = {
   length: 60,
   slug: "60",
   title: "60min",
-  eventName: "Dynamic Collective 60min Event",
-  description: "Dynamic Collective 60min Event",
-  descriptionAsSafeHTML: "Dynamic Collective 60min Event",
+  eventName: "Collective 60min Event",
+  description: "Collective 60min Event",
+  descriptionAsSafeHTML: "Collective 60min Event",
   position: 2,
   ...commons,
 };
@@ -125,8 +124,16 @@ export const getDynamicEventDescription = (dynamicUsernames: string[], slug: str
 };
 
 export const getDynamicEventName = (dynamicNames: string[], slug: string): string => {
-  const lastUser = dynamicNames.pop();
-  return `Dynamic Collective ${slug} min event with ${dynamicNames.join(", ")} & ${lastUser}`;
+  return `${dynamicNames.join(" <> ")} (Collective ${slug} min event)`;
+};
+
+export const getDefaultDynamicEvent = (dynamicNames: string[], slug: string) => {
+  const event =
+    defaultEvents.find((obj) => {
+      return obj.slug === slug;
+    }) || min15Event;
+  event.eventName = getDynamicEventName(dynamicNames, slug);
+  return event;
 };
 
 export const getDefaultEvent = (slug: string) => {

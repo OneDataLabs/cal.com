@@ -5,7 +5,8 @@ export default class AttendeeAwaitingPaymentEmail extends AttendeeScheduledEmail
   protected getNodeMailerPayload(): Record<string, unknown> {
     return {
       to: `${this.attendee.name} <${this.attendee.email}>`,
-      from: `${this.calEvent.organizer.name} <${this.getMailerOptions().from}>`,
+      from: `ODL Bookings <${this.getMailerOptions().from}>`,
+      // from: `${this.calEvent.organizer.name} <${this.getMailerOptions().from}>`,
       replyTo: this.calEvent.organizer.email,
       subject: `${this.attendee.language.translate("awaiting_payment_subject", {
         eventType: this.calEvent.type,

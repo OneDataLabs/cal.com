@@ -203,7 +203,7 @@ export default function Custom404() {
                 )}
               </div>
               <div className="mt-12">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+                {/*<h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
                   {t("popular_pages")}
                 </h2>
                 {!isSubpage && isCalcom && (
@@ -314,6 +314,14 @@ export default function Custom404() {
                   <Link href="/">
                     <a className="text-base font-medium text-black hover:text-gray-500">
                       {t("or_go_back_home")}
+                      <span aria-hidden="true"> &rarr;</span>
+                    </a>
+                  </Link>
+                </div>*/}
+                <div className="mt-8">
+                  <Link href="/">
+                    <a className="text-base font-medium text-black hover:text-gray-500">
+                      {t("go_back_home")}
                       <span aria-hidden="true"> &rarr;</span>
                     </a>
                   </Link>

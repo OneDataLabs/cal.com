@@ -192,7 +192,7 @@ const ProfileView = () => {
             render={({ field: { value } }) => (
               <>
                 <Avatar alt="" imageSrc={value} gravatarFallbackMd5={emailMd5} size="lg" />
-                <div className="ml-4">
+                {/*<div className="ml-4">
                   <ImageUploader
                     target="avatar"
                     id="avatar-upload"
@@ -202,7 +202,7 @@ const ProfileView = () => {
                     }}
                     imageSrc={value}
                   />
-                </div>
+                  </div>*/}
               </>
             )}
           />

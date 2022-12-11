@@ -46,7 +46,9 @@ const EmailBodyLogo = () => {
                     paddingTop: "32px",
                     wordBreak: "break-word",
                   }}>
-                  <Row border="0" style={{ borderCollapse: "collapse", borderSpacing: "0px" }}>
+                  <Row
+                    border="0"
+                    style={{ borderCollapse: "collapse", borderSpacing: "0px", display: "none" }}>
                     <td style={{ width: "89px" }}>
                       <a href={WEBAPP_URL} target="_blank" rel="noreferrer">
                         <img

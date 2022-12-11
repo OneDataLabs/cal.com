@@ -80,7 +80,8 @@ const nextConfig = {
   i18n,
   /* We already do type check on GH actions */
   typescript: {
-    ignoreBuildErrors: !!process.env.CI,
+    // ignoreBuildErrors: !!process.env.CI,
+    ignoreBuildErrors: true,
   },
   /* We already do linting on GH actions */
   eslint: {

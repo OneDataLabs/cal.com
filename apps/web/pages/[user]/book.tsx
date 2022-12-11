@@ -4,7 +4,7 @@ import { JSONObject } from "superjson/dist/types";
 import { LocationObject, privacyFilteredLocations } from "@calcom/app-store/locations";
 import { parseRecurringEvent } from "@calcom/lib";
 import {
-  getDefaultEvent,
+  getDefaultDynamicEvent,
   getDynamicEventName,
   getGroupName,
   getUsernameList,
@@ -85,12 +85,21 @@ export async function getServerSideProps(context: GetServerSidePropsContext) {
       darkBrandColor: true,
       allowDynamicBooking: true,
       away: true,
+      destinationCalendar: true,
     },
   });
 
   if (!users.length) return { notFound: true };
   const [user] = users;
   const isDynamicGroupBooking = users.length > 1;
+
+  const dynamicNames = isDynamicGroupBooking
+    ? users
+        .sort((a, b) => usernameList.indexOf(b.username) - usernameList.indexOf(a.username))
+        .map((user) => {
+          return user.name || "";
+        })
+    : [];
 
   // Dynamic Group link doesn't need a type but it must have a slug
   if ((!isDynamicGroupBooking && !context.query.type) || (isDynamicGroupBooking && !eventTypeSlug)) {
@@ -99,7 +108,7 @@ export async function getServerSideProps(context: GetServerSidePropsContext) {
 
   const eventTypeRaw =
     usernameList.length > 1
-      ? getDefaultEvent(eventTypeSlug)
+      ? getDefaultDynamicEvent(dynamicNames, eventTypeSlug)
       : await prisma.eventType.findUnique({
           where: {
             id: parseInt(asStringOrThrow(context.query.type)),
@@ -126,15 +135,17 @@ export async function getServerSideProps(context: GetServerSidePropsContext) {
       periodStartDate: e.periodStartDate?.toString() ?? null,
       periodEndDate: e.periodEndDate?.toString() ?? null,
       schedulingType: null,
-      users: users.map((u) => ({
-        id: u.id,
-        name: u.name,
-        username: u.username,
-        avatar: u.avatar,
-        image: u.avatar,
-        slug: u.username,
-        theme: u.theme,
-      })),
+      users: users
+        .sort((a, b) => usernameList.indexOf(b.username) - usernameList.indexOf(a.username))
+        .map((u) => ({
+          id: u.id,
+          name: u.name,
+          username: u.username,
+          avatar: u.avatar,
+          image: u.avatar,
+          slug: u.username,
+          theme: u.theme,
+        })),
     };
   })[0];
 
@@ -147,12 +158,6 @@ export async function getServerSideProps(context: GetServerSidePropsContext) {
         : (context.query.bookingUid as string)
     );
   }
-
-  const dynamicNames = isDynamicGroupBooking
-    ? users.map((user) => {
-        return user.name || "";
-      })
-    : [];
 
   const profile = isDynamicGroupBooking
     ? {

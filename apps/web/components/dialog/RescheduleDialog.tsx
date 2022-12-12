@@ -1,16 +1,18 @@
-import { useMutation } from "@tanstack/react-query";
-import { RescheduleResponse } from "pages/api/book/request-reschedule";
-import React, { useState, Dispatch, SetStateAction } from "react";
+import { Dispatch, SetStateAction, useState } from "react";
 
 import { useLocale } from "@calcom/lib/hooks/useLocale";
-import showToast from "@calcom/lib/notification";
 import { trpc } from "@calcom/trpc/react";
-import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader } from "@calcom/ui/Dialog";
-import { Icon } from "@calcom/ui/Icon";
-import { TextArea } from "@calcom/ui/form/fields";
-import Button from "@calcom/ui/v2/core/Button";
-
-import * as fetchWrapper from "@lib/core/http/fetch-wrapper";
+import {
+  Button,
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  Icon,
+  showToast,
+  TextArea,
+} from "@calcom/ui";
 
 interface IRescheduleDialog {
   isOpenDialog: boolean;
@@ -23,35 +25,18 @@ export const RescheduleDialog = (props: IRescheduleDialog) => {
   const utils = trpc.useContext();
   const { isOpenDialog, setIsOpenDialog, bookingUId: bookingId } = props;
   const [rescheduleReason, setRescheduleReason] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const rescheduleApi = useMutation(
-    async () => {
-      setIsLoading(true);
-      try {
-        const result = await fetchWrapper.post<
-          { bookingId: string; rescheduleReason: string },
-          RescheduleResponse
-        >("/api/book/request-reschedule", {
-          bookingId,
-          rescheduleReason,
-        });
 
-        if (result) {
-          showToast(t("reschedule_request_sent"), "success");
-          setIsOpenDialog(false);
-        }
-      } catch (error) {
-        showToast(t("unexpected_error_try_again"), "error");
-        // @TODO: notify sentry
-      }
-      setIsLoading(false);
+  const { mutate: rescheduleApi, isLoading } = trpc.viewer.bookings.requestReschedule.useMutation({
+    async onSuccess() {
+      showToast(t("reschedule_request_sent"), "success");
+      setIsOpenDialog(false);
+      await utils.viewer.bookings.invalidate();
     },
-    {
-      async onSettled() {
-        await utils.invalidateQueries(["viewer.bookings"]);
-      },
-    }
-  );
+    onError() {
+      showToast(t("unexpected_error_try_again"), "error");
+      // @TODO: notify sentry
+    },
+  });
 
   return (
     <Dialog open={isOpenDialog} onOpenChange={setIsOpenDialog}>
@@ -62,8 +47,7 @@ export const RescheduleDialog = (props: IRescheduleDialog) => {
           </div>
           <div className="pt-1">
             <DialogHeader title={t("send_reschedule_request")} />
-
-            <p className="-mt-8 text-sm text-gray-500">{t("reschedule_modal_description")}</p>
+            <p className="text-sm text-gray-500">{t("reschedule_modal_description")}</p>
             <p className="mt-6 mb-2 text-sm font-bold text-black">
               {t("reason_for_reschedule_request")}
               <span className="font-normal text-gray-500"> (Optional)</span>
@@ -77,14 +61,15 @@ export const RescheduleDialog = (props: IRescheduleDialog) => {
             />
 
             <DialogFooter>
-              <DialogClose asChild>
-                <Button color="secondary">{t("cancel")}</Button>
-              </DialogClose>
+              <DialogClose />
               <Button
                 data-testid="send_request"
                 disabled={isLoading}
                 onClick={() => {
-                  rescheduleApi.mutate();
+                  rescheduleApi({
+                    bookingId,
+                    rescheduleReason,
+                  });
                 }}>
                 {t("send_reschedule_request")}
               </Button>

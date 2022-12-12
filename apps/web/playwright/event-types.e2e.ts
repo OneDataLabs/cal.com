@@ -1,15 +1,17 @@
 import { expect } from "@playwright/test";
 
+import { WEBAPP_URL } from "@calcom/lib/constants";
+
 import { randomString } from "../lib/random";
 import { test } from "./lib/fixtures";
 
 test.describe.configure({ mode: "parallel" });
 
 test.describe("Event Types tests", () => {
-  test.describe("pro user", () => {
+  test.describe("user", () => {
     test.beforeEach(async ({ page, users }) => {
-      const proUser = await users.create();
-      await proUser.login();
+      const user = await users.create();
+      await user.login();
       await page.goto("/event-types");
       // We wait until loading is finished
       await page.waitForSelector('[data-testid="event-types"]');
@@ -20,7 +22,7 @@ test.describe("Event Types tests", () => {
     });
 
     test("has at least 2 events", async ({ page }) => {
-      const $eventTypes = page.locator("[data-testid=event-types] > *");
+      const $eventTypes = page.locator("[data-testid=event-types] > li a");
       const count = await $eventTypes.count();
       expect(count).toBeGreaterThanOrEqual(2);
     });
@@ -87,7 +89,7 @@ test.describe("Event Types tests", () => {
       );
       const href = await firstElement.getAttribute("href");
       if (!href) throw new Error("No href found for event type");
-      const [eventTypeId] = href.split("/").reverse();
+      const [eventTypeId] = new URL(WEBAPP_URL + href).pathname.split("/").reverse();
       const firstTitle = await page.locator(`[data-testid=event-type-title-${eventTypeId}]`).innerText();
       const firstFullSlug = await page.locator(`[data-testid=event-type-slug-${eventTypeId}]`).innerText();
       const firstSlug = firstFullSlug.split("/")[2];
@@ -99,16 +101,16 @@ test.describe("Event Types tests", () => {
       const params = new URLSearchParams(url);
 
       expect(params.get("title")).toBe(firstTitle);
-      expect(params.get("slug")).toBe(firstSlug);
+      expect(params.get("slug")).toContain(firstSlug);
 
       const formTitle = await page.inputValue("[name=title]");
       const formSlug = await page.inputValue("[name=slug]");
 
       expect(formTitle).toBe(firstTitle);
-      expect(formSlug).toBe(firstSlug);
+      expect(formSlug).toContain(firstSlug);
     });
     test("edit first event", async ({ page }) => {
-      const $eventTypes = page.locator("[data-testid=event-types] > *");
+      const $eventTypes = page.locator("[data-testid=event-types] > li a");
       const firstEventTypeElement = $eventTypes.first();
       await firstEventTypeElement.click();
       await page.waitForNavigation({
@@ -118,37 +120,7 @@ test.describe("Event Types tests", () => {
       });
       await page.locator("[data-testid=update-eventtype]").click();
       const toast = await page.waitForSelector("div[class*='data-testid-toast-success']");
-      await expect(toast).toBeTruthy();
-    });
-  });
-
-  test.describe("free user", () => {
-    test.beforeEach(async ({ page, users }) => {
-      const free = await users.create({ plan: "FREE" });
-      await free.login();
-      await page.goto("/event-types");
-      // We wait until loading is finished
-      await page.waitForSelector('[data-testid="event-types"]');
-    });
-
-    test("has at least 2 events where first is enabled", async ({ page }) => {
-      const $eventTypes = page.locator("[data-testid=event-types] > *");
-      const count = await $eventTypes.count();
-      expect(count).toBeGreaterThanOrEqual(2);
-    });
-
-    test("edit first event", async ({ page }) => {
-      const $eventTypes = page.locator("[data-testid=event-types] > *");
-      const firstEventTypeElement = $eventTypes.first();
-      await firstEventTypeElement.click();
-      await page.waitForNavigation({
-        url: (url) => {
-          return !!url.pathname.match(/\/event-types\/.+/);
-        },
-      });
-      await page.locator("[data-testid=update-eventtype]").click();
-      const toast = await page.waitForSelector("div[class*='data-testid-toast-success']");
-      await expect(toast).toBeTruthy();
+      expect(toast).toBeTruthy();
     });
   });
 });

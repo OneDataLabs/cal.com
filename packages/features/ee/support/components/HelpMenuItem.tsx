@@ -3,10 +3,8 @@ import { useChat } from "react-live-chat-loader";
 
 import classNames from "@calcom/lib/classNames";
 import { useLocale } from "@calcom/lib/hooks/useLocale";
-import showToast from "@calcom/lib/notification";
 import { trpc } from "@calcom/trpc/react";
-import Button from "@calcom/ui/Button";
-import { Icon } from "@calcom/ui/Icon";
+import { Button, Icon, showToast } from "@calcom/ui";
 
 import ContactMenuItem from "./ContactMenuItem";
 
@@ -22,7 +20,7 @@ export default function HelpMenuItem({ onHelpItemSelect }: HelpMenuItemProps) {
   const [, loadChat] = useChat();
   const { t } = useLocale();
 
-  const mutation = trpc.useMutation("viewer.submitFeedback", {
+  const mutation = trpc.viewer.submitFeedback.useMutation({
     onSuccess: () => {
       setDisableSubmit(true);
       showToast("Thank you, feedback submitted", "success");
@@ -40,7 +38,7 @@ export default function HelpMenuItem({ onHelpItemSelect }: HelpMenuItemProps) {
   };
 
   return (
-    <div className="w-full border-gray-300 bg-white">
+    <div className="w-full rounded-md border-gray-300 bg-white">
       <div className="w-full py-5">
         <p className="mb-1 px-5 text-neutral-500">{t("resources").toUpperCase()}</p>
         <a
@@ -53,7 +51,7 @@ export default function HelpMenuItem({ onHelpItemSelect }: HelpMenuItemProps) {
           <Icon.FiExternalLink
             className={classNames(
               "text-neutral-400 group-hover:text-neutral-500",
-              "ml-1 h-5 w-5 flex-shrink-0 ltr:mr-3"
+              "ml-1 mt-px h-4 w-4 flex-shrink-0 ltr:mr-3"
             )}
           />
         </a>
@@ -67,7 +65,7 @@ export default function HelpMenuItem({ onHelpItemSelect }: HelpMenuItemProps) {
           <Icon.FiExternalLink
             className={classNames(
               "text-neutral-400 group-hover:text-neutral-500",
-              "ml-1 h-5 w-5 flex-shrink-0 ltr:mr-3"
+              "ml-1 mt-px h-4 w-4 flex-shrink-0 ltr:mr-3"
             )}
           />
         </a>

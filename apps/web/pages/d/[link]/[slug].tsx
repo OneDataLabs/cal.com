@@ -1,21 +1,22 @@
 import { GetServerSidePropsContext } from "next";
-import { JSONObject } from "superjson/dist/types";
 import { z } from "zod";
 
 import { privacyFilteredLocations, LocationObject } from "@calcom/core/location";
 import { parseRecurringEvent } from "@calcom/lib";
 import { availiblityPageEventTypeSelect } from "@calcom/prisma";
 import prisma from "@calcom/prisma";
+import { EventTypeMetaDataSchema } from "@calcom/prisma/zod-utils";
 
 import { getWorkingHours } from "@lib/availability";
 import { GetBookingType } from "@lib/getBooking";
 import { inferSSRProps } from "@lib/types/inferSSRProps";
+import { EmbedProps } from "@lib/withEmbedSsr";
 
 import AvailabilityPage from "@components/booking/pages/AvailabilityPage";
 
 import { ssrInit } from "@server/lib/ssr";
 
-export type DynamicAvailabilityPageProps = inferSSRProps<typeof getServerSideProps>;
+export type DynamicAvailabilityPageProps = inferSSRProps<typeof getServerSideProps> & EmbedProps;
 
 export default function Type(props: DynamicAvailabilityPageProps) {
   return <AvailabilityPage {...props} />;
@@ -48,11 +49,15 @@ export const getServerSideProps = async (context: GetServerSidePropsContext) => 
   if (!userId)
     return {
       notFound: true,
+    } as {
+      notFound: true;
     };
 
   if (hashedLink?.eventType.slug !== slug)
     return {
       notFound: true,
+    } as {
+      notFound: true;
     };
 
   const users = await prisma.user.findMany({
@@ -85,13 +90,14 @@ export const getServerSideProps = async (context: GetServerSidePropsContext) => 
         },
       },
       theme: true,
-      plan: true,
     },
   });
 
   if (!users || !users.length) {
     return {
       notFound: true,
+    } as {
+      notFound: true;
     };
   }
 
@@ -100,7 +106,7 @@ export const getServerSideProps = async (context: GetServerSidePropsContext) => 
     : [];
 
   const eventTypeObject = Object.assign({}, hashedLink.eventType, {
-    metadata: {} as JSONObject,
+    metadata: EventTypeMetaDataSchema.parse(hashedLink.eventType.metadata || {}),
     recurringEvent: parseRecurringEvent(hashedLink.eventType.recurringEvent),
     periodStartDate: hashedLink.eventType.periodStartDate?.toString() ?? null,
     periodEndDate: hashedLink.eventType.periodEndDate?.toString() ?? null,
@@ -110,7 +116,6 @@ export const getServerSideProps = async (context: GetServerSidePropsContext) => 
       name: u.name,
       username: u.username,
       hideBranding: u.hideBranding,
-      plan: u.plan,
       timeZone: u.timeZone,
     })),
   });
@@ -151,7 +156,6 @@ export const getServerSideProps = async (context: GetServerSidePropsContext) => 
       away: user.away,
       isDynamicGroup: false,
       profile,
-      plan: user.plan,
       date,
       eventType: eventTypeObject,
       workingHours,
@@ -159,6 +163,7 @@ export const getServerSideProps = async (context: GetServerSidePropsContext) => 
       previousPage: context.req.headers.referer ?? null,
       booking,
       users: [user.username],
+      isBrandingHidden: user.hideBranding,
     },
   };
 };

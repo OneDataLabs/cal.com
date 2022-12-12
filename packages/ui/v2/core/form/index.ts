@@ -1,7 +1,12 @@
-export * from "./radio-area";
-export * from "./fields";
-export { default as Checkbox } from "./Checkbox";
+export {
+  RadioGroup,
+  /* TODO: solve this conflict -> Select, */
+  Radio,
+  Group,
+  RadioField,
+} from "./radio-area";
+export { default as Checkbox } from "../../../components/form/checkbox/Checkbox";
 export { default as DatePicker } from "./DatePicker";
-export { default as Select, SelectWithValidation, SelectField } from "./Select";
+export { default as Select, SelectWithValidation, SelectField, getReactSelectProps } from "./select";
 
 export { default as FormStep } from "./FormStep";

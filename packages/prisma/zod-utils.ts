@@ -1,6 +1,18 @@
-import { z } from "zod";
+import { EventTypeCustomInputType } from "@prisma/client";
+import { UnitTypeLongPlural } from "dayjs";
+import z, { ZodNullable, ZodObject, ZodOptional } from "zod";
 
-import { LocationType } from "@calcom/app-store/locations";
+/* eslint-disable no-underscore-dangle */
+import type {
+  objectInputType,
+  objectOutputType,
+  ZodNullableDef,
+  ZodOptionalDef,
+  ZodRawShape,
+  ZodTypeAny,
+} from "zod";
+
+import { appDataSchemas } from "@calcom/app-store/apps.schemas.generated";
 import dayjs from "@calcom/dayjs";
 import { slugify } from "@calcom/lib/slugify";
 
@@ -14,6 +26,30 @@ export enum Frequency {
   MINUTELY = 5,
   SECONDLY = 6,
 }
+
+export const RequiresConfirmationThresholdUnits: z.ZodType<UnitTypeLongPlural> = z.enum(["hours", "minutes"]);
+
+export const EventTypeMetaDataSchema = z
+  .object({
+    smartContractAddress: z.string().optional(),
+    blockchainId: z.number().optional(),
+    multipleDuration: z.number().array().optional(),
+    giphyThankYouPage: z.string().optional(),
+    apps: z.object(appDataSchemas).partial().optional(),
+    additionalNotesRequired: z.boolean().optional(),
+    requiresConfirmationThreshold: z
+      .object({
+        time: z.number(),
+        unit: RequiresConfirmationThresholdUnits,
+      })
+      .optional(),
+    config: z
+      .object({
+        useHostSchedulesForTeamEvent: z.boolean().optional(),
+      })
+      .optional(),
+  })
+  .nullable();
 
 export const eventTypeLocations = z.array(
   z.object({
@@ -36,6 +72,29 @@ export const recurringEventType = z
     freq: z.nativeEnum(Frequency),
     until: z.date().optional(),
     tzid: z.string().optional(),
+  })
+  .nullable();
+
+// dayjs iso parsing is very buggy - cant use :( - turns ISO string into Date object
+export const iso8601 = z.string().transform((val, ctx) => {
+  const time = Date.parse(val);
+  if (!time) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Invalid ISO Date",
+    });
+  }
+  const d = new Date();
+  d.setTime(time);
+  return d;
+});
+
+export const bookingLimitsType = z
+  .object({
+    PER_DAY: z.number().optional(),
+    PER_WEEK: z.number().optional(),
+    PER_MONTH: z.number().optional(),
+    PER_YEAR: z.number().optional(),
   })
   .nullable();
 
@@ -102,10 +161,31 @@ export const extendedBookingCreateBody = bookingCreateBodySchema.merge(
   z.object({
     noEmail: z.boolean().optional(),
     recurringCount: z.number().optional(),
+    allRecurringDates: z.string().array().optional(),
+    currentRecurringIndex: z.number().optional(),
     rescheduleReason: z.string().optional(),
-    smsReminderNumber: z.string().optional(),
+    smsReminderNumber: z.string().optional().nullable(),
+    appsStatus: z
+      .array(
+        z.object({
+          appName: z.string(),
+          success: z.number(),
+          failures: z.number(),
+          type: z.string(),
+          errors: z.string().array(),
+          warnings: z.string().array().optional(),
+        })
+      )
+      .optional(),
   })
 );
+
+export const schemaBookingCancelParams = z.object({
+  id: z.number().optional(),
+  uid: z.string().optional(),
+  allRemainingBookings: z.boolean().optional(),
+  cancellationReason: z.string().optional(),
+});
 
 export const vitalSettingsUpdateSchema = z.object({
   connected: z.boolean().optional(),
@@ -127,10 +207,37 @@ export const userMetadata = z
     stripeCustomerId: z.string().optional(),
     vitalSettings: vitalSettingsUpdateSchema.optional(),
     isPremium: z.boolean().optional(),
-    intentUsername: z.string().optional(),
-    checkoutSessionId: z.string().nullable().optional(),
   })
   .nullable();
+
+export const teamMetadataSchema = z
+  .object({
+    requestedSlug: z.string(),
+    paymentId: z.string(),
+    subscriptionId: z.string().nullable(),
+    subscriptionItemId: z.string().nullable(),
+  })
+  .partial()
+  .nullable();
+
+export const customInputOptionSchema = z.array(
+  z.object({
+    label: z.string(),
+    type: z.string(),
+  })
+);
+
+export const customInputSchema = z.object({
+  id: z.number(),
+  eventTypeId: z.number(),
+  label: z.string(),
+  type: z.nativeEnum(EventTypeCustomInputType),
+  options: customInputOptionSchema.optional().nullable(),
+  required: z.boolean(),
+  placeholder: z.string(),
+});
+
+export type CustomInputSchema = z.infer<typeof customInputSchema>;
 
 /**
  * Ensures that it is a valid HTTP URL
@@ -147,3 +254,90 @@ export const successRedirectUrl = z
       .regex(/^http(s)?:\/\/.*/),
   ])
   .optional();
+
+export const RoutingFormSettings = z
+  .object({
+    emailOwnerOnSubmission: z.boolean(),
+  })
+  .nullable();
+
+export type ZodDenullish<T extends ZodTypeAny> = T extends ZodNullable<infer U> | ZodOptional<infer U>
+  ? ZodDenullish<U>
+  : T;
+
+export type ZodDenullishShape<T extends ZodRawShape> = {
+  [k in keyof T]: ZodDenullish<T[k]>;
+};
+
+export const denullish = <T extends ZodTypeAny>(schema: T): ZodDenullish<T> =>
+  (schema instanceof ZodNullable || schema instanceof ZodOptional
+    ? denullish((schema._def as ZodNullableDef | ZodOptionalDef).innerType)
+    : schema) as ZodDenullish<T>;
+
+type UnknownKeysParam = "passthrough" | "strict" | "strip";
+
+/**
+ * @see https://github.com/3x071c/lsg-remix/blob/e2a9592ba3ec5103556f2cf307c32f08aeaee32d/app/lib/util/zod.ts
+ */
+export function denullishShape<
+  T extends ZodRawShape,
+  UnknownKeys extends UnknownKeysParam = "strip",
+  Catchall extends ZodTypeAny = ZodTypeAny,
+  Output = objectOutputType<T, Catchall>,
+  Input = objectInputType<T, Catchall>
+>(
+  obj: ZodObject<T, UnknownKeys, Catchall, Output, Input>
+): ZodObject<ZodDenullishShape<T>, UnknownKeys, Catchall> {
+  const a = entries(obj.shape).map(([field, schema]) => [field, denullish(schema)] as const) as {
+    [K in keyof T]: [K, ZodDenullish<T[K]>];
+  }[keyof T][];
+  return new ZodObject({
+    ...obj._def,
+    shape: () => fromEntries(a) as unknown as ZodDenullishShape<T>, // TODO: Safely assert type
+  });
+}
+
+/**
+ * Like Object.entries, but with actually useful typings
+ * @param obj The object to turn into a tuple array (`[key, value][]`)
+ * @returns The constructed tuple array from the given object
+ * @see https://github.com/3x071c/lsg-remix/blob/e2a9592ba3ec5103556f2cf307c32f08aeaee32d/app/lib/util/entries.ts
+ */
+export const entries = <O>(
+  obj: O
+): {
+  readonly [K in keyof O]: [K, O[K]];
+}[keyof O][] => {
+  return Object.entries(obj) as {
+    [K in keyof O]: [K, O[K]];
+  }[keyof O][];
+};
+
+/**
+ * Returns a type with all readonly notations removed (traverses recursively on an object)
+ */
+type DeepWriteable<T> = T extends Readonly<{
+  -readonly [K in keyof T]: T[K];
+}>
+  ? {
+      -readonly [K in keyof T]: DeepWriteable<T[K]>;
+    }
+  : T; /* Make it work with readonly types (this is not strictly necessary) */
+
+type FromEntries<T> = T extends [infer Keys, unknown][]
+  ? { [K in Keys & PropertyKey]: Extract<T[number], [K, unknown]>[1] }
+  : never;
+
+/**
+ * Like Object.fromEntries, but with actually useful typings
+ * @param arr The tuple array (`[key, value][]`) to turn into an object
+ * @returns Object constructed from the given entries
+ * @see https://github.com/3x071c/lsg-remix/blob/e2a9592ba3ec5103556f2cf307c32f08aeaee32d/app/lib/util/fromEntries.ts
+ */
+export const fromEntries = <
+  E extends [PropertyKey, unknown][] | ReadonlyArray<readonly [PropertyKey, unknown]>
+>(
+  entries: E
+): FromEntries<DeepWriteable<E>> => {
+  return Object.fromEntries(entries) as FromEntries<DeepWriteable<E>>;
+};

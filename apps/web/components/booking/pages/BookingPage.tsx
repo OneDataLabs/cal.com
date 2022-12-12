@@ -1,25 +1,27 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { EventTypeCustomInputType, WorkflowActions } from "@prisma/client";
-import { SchedulingType } from "@prisma/client";
 import { useMutation } from "@tanstack/react-query";
 import { isValidPhoneNumber } from "libphonenumber-js";
 import { useSession } from "next-auth/react";
 import Head from "next/head";
 import { useRouter } from "next/router";
-import { useEffect, useMemo, useState, useReducer } from "react";
+import { useEffect, useMemo, useReducer, useState } from "react";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { FormattedNumber, IntlProvider } from "react-intl";
 import { ReactMultiEmail } from "react-multi-email";
 import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
 
+import BookingPageTagManager from "@calcom/app-store/BookingPageTagManager";
 import {
-  locationKeyToString,
-  getEventLocationValue,
-  getEventLocationType,
   EventLocationType,
+  getEventLocationType,
+  getEventLocationValue,
+  getHumanReadableLocationValue,
+  locationKeyToString,
 } from "@calcom/app-store/locations";
 import { createPaymentLink } from "@calcom/app-store/stripepayment/lib/client";
+import { getEventTypeAppData } from "@calcom/app-store/utils";
 import { LocationObject, LocationType } from "@calcom/core/location";
 import dayjs from "@calcom/dayjs";
 import {
@@ -29,28 +31,27 @@ import {
 } from "@calcom/embed-core/embed-iframe";
 import CustomBranding from "@calcom/lib/CustomBranding";
 import classNames from "@calcom/lib/classNames";
+import { APP_NAME } from "@calcom/lib/constants";
+import getStripeAppData from "@calcom/lib/getStripeAppData";
 import { useLocale } from "@calcom/lib/hooks/useLocale";
 import useTheme from "@calcom/lib/hooks/useTheme";
 import { HttpError } from "@calcom/lib/http-error";
 import { getEveryFreqFor } from "@calcom/lib/recurringStrings";
 import { collectPageParameters, telemetryEventTypes, useTelemetry } from "@calcom/lib/telemetry";
-import { Icon } from "@calcom/ui/Icon";
-import { Tooltip } from "@calcom/ui/Tooltip";
-import PhoneInput from "@calcom/ui/form/PhoneInputLazy";
-import { EmailInput, Form } from "@calcom/ui/form/fields";
-import { Button } from "@calcom/ui/v2";
+import { AddressInput, Button, EmailInput, Form, Icon, PhoneInput, Tooltip } from "@calcom/ui";
+import { Group, RadioField } from "@calcom/ui";
 
 import { asStringOrNull } from "@lib/asStringOrNull";
 import { timeZone } from "@lib/clock";
 import { ensureArray } from "@lib/ensureArray";
+import useRouterQuery from "@lib/hooks/useRouterQuery";
 import createBooking from "@lib/mutations/bookings/create-booking";
 import createRecurringBooking from "@lib/mutations/bookings/create-recurring-booking";
 import { parseDate, parseRecurringDates } from "@lib/parseDate";
 import slugify from "@lib/slugify";
 
 import Gates, { Gate, GateState } from "@components/Gates";
-import { UserAvatars } from "@components/booking/UserAvatars";
-import EventTypeDescriptionSafeHTML from "@components/eventtype/EventTypeDescriptionSafeHTML";
+import BookingDescription from "@components/booking/BookingDescription";
 
 import { BookPageProps } from "../../../pages/[user]/book";
 import { HashLinkPageProps } from "../../../pages/d/[link]/book";
@@ -64,6 +65,8 @@ type BookingFormValues = {
   notes?: string;
   locationType?: EventLocationType["type"];
   guests?: string[];
+  address?: string;
+  attendeeAddress?: string;
   phone?: string;
   hostPhoneNumber?: string; // Maybe come up with a better way to name this to distingish between two types of phone numbers
   customInputs?: {
@@ -81,9 +84,11 @@ const BookingPage = ({
   recurringEventCount,
   hasHashedBookingLink,
   hashedLink,
+  ...restProps
 }: BookingPageProps) => {
   const { t, i18n } = useLocale();
-  const isEmbed = useIsEmbed();
+  const { duration: queryDuration } = useRouterQuery("duration");
+  const isEmbed = useIsEmbed(restProps.isEmbed);
   const shouldAlignCentrallyInEmbed = useEmbedNonStylesConfig("align") !== "left";
   const shouldAlignCentrally = !isEmbed || shouldAlignCentrallyInEmbed;
   const router = useRouter();
@@ -97,6 +102,12 @@ const BookingPage = ({
     }),
     {}
   );
+  const stripeAppData = getStripeAppData(eventType);
+  // Define duration now that we support multiple duration eventTypes
+  let duration = eventType.length;
+  if (queryDuration && !isNaN(Number(queryDuration))) {
+    duration = Number(queryDuration);
+  }
 
   useEffect(() => {
     if (top !== window) {
@@ -111,33 +122,25 @@ const BookingPage = ({
 
   const mutation = useMutation(createBooking, {
     onSuccess: async (responseData) => {
-      const { id, attendees, paymentUid } = responseData;
+      const { uid, paymentUid } = responseData;
       if (paymentUid) {
         return await router.push(
           createPaymentLink({
             paymentUid,
             date,
-            name: attendees[0].name,
-            email: attendees[0].email,
+            name: bookingForm.getValues("name"),
+            email: bookingForm.getValues("email"),
             absolute: false,
           })
         );
       }
 
       return router.push({
-        pathname: "/success",
+        pathname: `/booking/${uid}`,
         query: {
-          date,
-          type: eventType.id,
-          eventSlug: eventType.slug,
-          user: profile.slug,
-          reschedule: !!rescheduleUid,
-          name: attendees[0].name,
-          email: attendees[0].email,
-          location: responseData.location,
-          eventName: profile.eventName || "",
-          bookingId: id,
           isSuccessBookingPage: true,
+          email: bookingForm.getValues("email"),
+          eventTypeSlug: eventType.slug,
         },
       });
     },
@@ -145,31 +148,14 @@ const BookingPage = ({
 
   const recurringMutation = useMutation(createRecurringBooking, {
     onSuccess: async (responseData = []) => {
-      const { attendees = [], id, recurringEventId } = responseData[0] || {};
-      const location = (function humanReadableLocation(location) {
-        if (!location) {
-          return;
-        }
-        if (location.includes("integration")) {
-          return t("web_conferencing_details_to_follow");
-        }
-        return location;
-      })(responseData[0].location);
+      const { uid } = responseData[0] || {};
 
       return router.push({
-        pathname: "/success",
+        pathname: `/booking/${uid}`,
         query: {
-          date,
-          type: eventType.id,
-          eventSlug: eventType.slug,
-          recur: recurringEventId,
-          user: profile.slug,
-          reschedule: !!rescheduleUid,
-          name: attendees[0].name,
-          email: attendees[0].email,
-          location,
-          eventName: profile.eventName || "",
-          bookingId: id,
+          allRemainingBookings: true,
+          email: bookingForm.getValues("email"),
+          eventTypeSlug: eventType.slug,
         },
       });
     },
@@ -254,15 +240,18 @@ const BookingPage = ({
   const bookingFormSchema = z
     .object({
       name: z.string().min(1),
-      email: z.string().email(),
+      email: z.string().trim().email(),
       phone: z
         .string()
         .refine((val) => isValidPhoneNumber(val))
-        .optional(),
+        .optional()
+        .nullable(),
+      attendeeAddress: z.string().optional().nullable(),
       smsReminderNumber: z
         .string()
         .refine((val) => isValidPhoneNumber(val))
-        .optional(),
+        .optional()
+        .nullable(),
     })
     .passthrough();
 
@@ -286,10 +275,10 @@ const BookingPage = ({
 
   const selectedLocation = getEventLocationType(selectedLocationType);
   const AttendeeInput =
-    selectedLocation?.attendeeInputType === "text"
-      ? "input"
-      : selectedLocation?.attendeeInputType === "phone"
+    selectedLocation?.attendeeInputType === "phone"
       ? PhoneInput
+      : selectedLocation?.attendeeInputType === "attendeeAddress"
+      ? AddressInput
       : null;
 
   // Calculate the booking date(s)
@@ -326,13 +315,29 @@ const BookingPage = ({
         {}
       );
 
+    if (eventType.customInputs.length > 0) {
+      // find all required custom inputs and ensure they are filled out in the booking form
+      const requiredCustomInputs = eventType.customInputs.filter((input) => input.required);
+      const missingRequiredCustomInputs = requiredCustomInputs.filter(
+        (input) => !booking?.customInputs?.[input.id]
+      );
+      if (missingRequiredCustomInputs.length > 0) {
+        missingRequiredCustomInputs.forEach((input) => {
+          bookingForm.setError(`customInputs.${input.id}`, {
+            type: "required",
+          });
+        });
+        return;
+      }
+    }
+
     if (recurringDates.length) {
       // Identify set of bookings to one intance of recurring event to support batch changes
       const recurringEventId = uuidv4();
       const recurringBookings = recurringDates.map((recurringDate) => ({
         ...booking,
         start: dayjs(recurringDate).format(),
-        end: dayjs(recurringDate).add(eventType.length, "minute").format(),
+        end: dayjs(recurringDate).add(duration, "minute").format(),
         eventTypeId: eventType.id,
         eventTypeSlug: eventType.slug,
         recurringEventId,
@@ -345,6 +350,7 @@ const BookingPage = ({
         location: getEventLocationValue(locations, {
           type: booking.locationType ? booking.locationType : selectedLocationType || "",
           phone: booking.phone,
+          attendeeAddress: booking.attendeeAddress,
         }),
         metadata,
         customInputs: Object.keys(booking.customInputs || {}).map((inputId) => ({
@@ -354,7 +360,9 @@ const BookingPage = ({
         hasHashedBookingLink,
         hashedLink,
         smsReminderNumber:
-          selectedLocationType === LocationType.Phone ? booking.phone : booking.smsReminderNumber,
+          selectedLocationType === LocationType.Phone
+            ? booking.phone
+            : booking.smsReminderNumber || undefined,
         ethSignature: gateState.rainbowToken,
       }));
       recurringMutation.mutate(recurringBookings);
@@ -362,7 +370,7 @@ const BookingPage = ({
       mutation.mutate({
         ...booking,
         start: dayjs(date).format(),
-        end: dayjs(date).add(eventType.length, "minute").format(),
+        end: dayjs(date).add(duration, "minute").format(),
         eventTypeId: eventType.id,
         eventTypeSlug: eventType.slug,
         timeZone: timeZone(),
@@ -373,6 +381,7 @@ const BookingPage = ({
         location: getEventLocationValue(locations, {
           type: (booking.locationType ? booking.locationType : selectedLocationType) || "",
           phone: booking.phone,
+          attendeeAddress: booking.attendeeAddress,
         }),
         metadata,
         customInputs: Object.keys(booking.customInputs || {}).map((inputId) => ({
@@ -382,7 +391,9 @@ const BookingPage = ({
         hasHashedBookingLink,
         hashedLink,
         smsReminderNumber:
-          selectedLocationType === LocationType.Phone ? booking.phone : booking.smsReminderNumber,
+          selectedLocationType === LocationType.Phone
+            ? booking.phone
+            : booking.smsReminderNumber || undefined,
         ethSignature: gateState.rainbowToken,
       });
     }
@@ -396,6 +407,7 @@ const BookingPage = ({
     "dark:placeholder:text-darkgray-600 focus:border-brand dark:border-darkgray-300 dark:text-darkgray-900 block w-full rounded-md border-gray-300 text-sm focus:ring-black disabled:bg-gray-200 disabled:hover:cursor-not-allowed dark:bg-transparent dark:selection:bg-green-500 disabled:dark:text-gray-500";
 
   let isSmsReminderNumberNeeded = false;
+  let isSmsReminderNumberRequired = false;
 
   if (eventType.workflows.length > 0) {
     eventType.workflows.forEach((workflowReference) => {
@@ -403,23 +415,25 @@ const BookingPage = ({
         workflowReference.workflow.steps.forEach((step) => {
           if (step.action === WorkflowActions.SMS_ATTENDEE) {
             isSmsReminderNumberNeeded = true;
+            isSmsReminderNumberRequired = step.numberRequired || false;
             return;
           }
         });
       }
     });
   }
+  const rainbowAppData = getEventTypeAppData(eventType, "rainbow") || {};
 
   // Define conditional gates here
   const gates = [
     // Rainbow gate is only added if the event has both a `blockchainId` and a `smartContractAddress`
-    eventType.metadata && eventType.metadata.blockchainId && eventType.metadata.smartContractAddress
+    rainbowAppData && rainbowAppData.blockchainId && rainbowAppData.smartContractAddress
       ? ("rainbow" as Gate)
       : undefined,
   ];
 
   return (
-    <Gates gates={gates} metadata={eventType.metadata} dispatch={gateDispatcher}>
+    <Gates gates={gates} appData={rainbowAppData} dispatch={gateDispatcher}>
       <Head>
         <title>
           {rescheduleUid
@@ -431,10 +445,11 @@ const BookingPage = ({
                 eventTypeTitle: eventType.title,
                 profileName: profile.name,
               })}{" "}
-          | Cal.com
+          | {APP_NAME}
         </title>
         <link rel="icon" href="/favicon.ico" />
       </Head>
+      <BookingPageTagManager eventType={eventType} />
       <CustomBranding lightVal={profile.brandColor} darkVal={profile.darkBrandColor} />
       <main
         className={classNames(
@@ -450,48 +465,15 @@ const BookingPage = ({
           )}>
           <div className="sm:flex">
             <div className="sm:dark:border-darkgray-300 dark:text-darkgray-600 flex flex-col px-6 pt-6 pb-0 text-gray-600 sm:w-1/2 sm:border-r sm:pb-6">
-              <UserAvatars
-                profile={profile}
-                users={eventType.users}
-                showMembers={eventType.schedulingType !== SchedulingType.ROUND_ROBIN}
-                size={10}
-                truncateAfter={3}
-              />
-              <h2 className="mt-2 break-words text-sm font-medium text-gray-500 dark:text-gray-300">
-                {profile.name}
-              </h2>
-              <h1 className="font-cal dark:text-darkgray-900 break-words text-2xl text-gray-900 ">
-                {eventType.title}
-              </h1>
-              <div className="mt-4 flex flex-col space-y-3 lg:mt-9">
-                {eventType?.description && (
-                  <div className="dark:text-darkgray-600 flex text-sm font-medium text-gray-600">
-                    <div>
-                      <Icon.FiInfo className="dark:text-darkgray-600 mr-[10px] ml-[2px] -mt-1 inline-block h-4 w-4 text-gray-500" />
-                    </div>
-                    <EventTypeDescriptionSafeHTML eventType={eventType} />
-                  </div>
-                )}
-                {eventType?.requiresConfirmation && (
-                  <div className="dark:text-darkgray-600 flex items-center text-sm font-medium text-gray-600">
-                    <div>
-                      <Icon.FiCheckSquare className="mr-[10px] ml-[2px] -mt-1 inline-block h-4 w-4 " />
-                    </div>
-                    {t("requires_confirmation")}
-                  </div>
-                )}
-                <p className="dark:text-darkgray-600 text-sm font-medium text-gray-600">
-                  <Icon.FiClock className="mr-[10px] -mt-1 ml-[2px] inline-block h-4 w-4" />
-                  {eventType.length} {t("minutes")}
-                </p>
-                {eventType.price > 0 && (
+              <BookingDescription isBookingPage profile={profile} eventType={eventType}>
+                {stripeAppData.price > 0 && (
                   <p className="text-bookinglight -ml-2 px-2 text-sm ">
                     <Icon.FiCreditCard className="mr-[10px] ml-[2px] -mt-1 inline-block h-4 w-4" />
                     <IntlProvider locale="en">
                       <FormattedNumber
-                        value={eventType.price / 100.0}
+                        value={stripeAppData.price / 100.0}
                         style="currency"
-                        currency={eventType.currency.toUpperCase()}
+                        currency={stripeAppData.currency.toUpperCase()}
                       />
                     </IntlProvider>
                   </p>
@@ -511,19 +493,20 @@ const BookingPage = ({
                 <div className="text-bookinghighlight flex items-start text-sm">
                   <Icon.FiCalendar className="mr-[10px] ml-[2px] mt-[2px] inline-block h-4 w-4" />
                   <div className="text-sm font-medium">
-                    {(rescheduleUid || !eventType.recurringEvent?.freq) &&
-                      parseDate(dayjs(date).tz(timeZone()), i18n)}
+                    {(rescheduleUid || !eventType.recurringEvent?.freq) && `${parseDate(date, i18n)}`}
                     {!rescheduleUid &&
                       eventType.recurringEvent?.freq &&
-                      recurringStrings.slice(0, 5).map((aDate, key) => <p key={key}>{aDate}</p>)}
+                      recurringStrings.slice(0, 5).map((timeFormatted, key) => {
+                        return <p key={key}>{timeFormatted}</p>;
+                      })}
                     {!rescheduleUid && eventType.recurringEvent?.freq && recurringStrings.length > 5 && (
                       <div className="flex">
                         <Tooltip
-                          content={recurringStrings.slice(5).map((aDate, key) => (
-                            <p key={key}>{aDate}</p>
+                          content={recurringStrings.slice(5).map((timeFormatted, key) => (
+                            <p key={key}>{timeFormatted}</p>
                           ))}>
                           <p className="dark:text-darkgray-600 text-sm">
-                            {t("plus_more", { count: recurringStrings.length - 5 })}
+                            + {t("plus_more", { count: recurringStrings.length - 5 })}
                           </p>
                         </Tooltip>
                       </div>
@@ -543,7 +526,15 @@ const BookingPage = ({
                 )}
                 {!!eventType.seatsPerTimeSlot && (
                   <div className="text-bookinghighlight flex items-start text-sm">
-                    <Icon.FiUser className="mr-[10px] ml-[2px] mt-[2px] inline-block h-4 w-4" />
+                    <Icon.FiUser
+                      className={`mr-[10px] ml-[2px] mt-[2px] inline-block h-4 w-4 ${
+                        booking && booking.attendees.length / eventType.seatsPerTimeSlot >= 0.5
+                          ? "text-rose-600"
+                          : booking && booking.attendees.length / eventType.seatsPerTimeSlot >= 0.33
+                          ? "text-yellow-500"
+                          : "text-bookinghighlight"
+                      }`}
+                    />
                     <p
                       className={`${
                         booking && booking.attendees.length / eventType.seatsPerTimeSlot >= 0.5
@@ -559,7 +550,7 @@ const BookingPage = ({
                     </p>
                   </div>
                 )}
-              </div>
+              </BookingDescription>
             </div>
             <div className="p-6 sm:w-1/2">
               <Form form={bookingForm} handleSubmit={bookEvent}>
@@ -604,53 +595,89 @@ const BookingPage = ({
                     )}
                   </div>
                 </div>
-                {locations.length > 1 && (
-                  <div className="mb-4">
-                    <span className="block text-sm font-medium text-gray-700 dark:text-white">
-                      {t("location")}
-                    </span>
-                    {locations.map((location, i) => {
-                      const locationString = locationKeyToString(location);
-                      // TODO: Right now selectedLocationType isn't send by getSSP. Once that's available defaultChecked should work and show the location in the original booking
-                      const defaultChecked = rescheduleUid ? selectedLocationType === location.type : i === 0;
-                      if (typeof locationString !== "string") {
-                        // It's possible that location app got uninstalled
-                        return null;
-                      }
-                      return (
-                        <label key={i} className="block">
-                          <input
-                            type="radio"
-                            disabled={!!disableLocations}
-                            className="location dark:bg-darkgray-300 dark:border-darkgray-300 h-4 w-4 border-gray-300 text-black focus:ring-black ltr:mr-2 rtl:ml-2"
-                            {...bookingForm.register("locationType", { required: true })}
-                            value={location.type}
-                            defaultChecked={defaultChecked}
-                          />
-                          <span className="text-sm ltr:ml-2 rtl:mr-2 dark:text-white">
-                            {locationKeyToString(location)}
-                          </span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                )}
+                <>
+                  {rescheduleUid ? (
+                    <div className="mb-4">
+                      <span className="block text-sm font-medium text-gray-700 dark:text-white">
+                        {t("location")}
+                      </span>
+                      <p className="mt-1 text-sm text-gray-500">
+                        {getHumanReadableLocationValue(booking?.location, t)}
+                      </p>
+                    </div>
+                  ) : (
+                    locations.length > 1 && (
+                      <div className="mb-4">
+                        <span className="block text-sm font-medium text-gray-700 dark:text-white">
+                          {t("location")}
+                        </span>
+                        {locations.map((location, i) => {
+                          const locationString = locationKeyToString(location);
+                          if (!selectedLocationType) {
+                            bookingForm.setValue("locationType", locations[0].type);
+                          }
+                          if (typeof locationString !== "string") {
+                            // It's possible that location app got uninstalled
+                            return null;
+                          }
+                          return (
+                            <label key={i} className="block">
+                              <input
+                                type="radio"
+                                disabled={!!disableLocations}
+                                className="location dark:bg-darkgray-300 dark:border-darkgray-300 h-4 w-4 border-gray-300 text-black focus:ring-black ltr:mr-2 rtl:ml-2"
+                                {...bookingForm.register("locationType", { required: true })}
+                                value={location.type}
+                                defaultChecked={i === 0}
+                              />
+                              <span className="text-sm ltr:ml-2 rtl:mr-2 dark:text-white">
+                                {locationKeyToString(location)}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )
+                  )}
+                </>
                 {/* TODO: Change name and id ="phone" to something generic */}
-                {AttendeeInput && (
+                {AttendeeInput && !disableInput && (
                   <div className="mb-4">
                     <label
-                      htmlFor="phone"
+                      htmlFor={
+                        selectedLocationType === LocationType.Phone
+                          ? "phone"
+                          : selectedLocationType === LocationType.AttendeeInPerson
+                          ? "attendeeAddress"
+                          : ""
+                      }
                       className="block text-sm font-medium text-gray-700 dark:text-white">
-                      {t("phone_number")}
+                      {selectedLocationType === LocationType.Phone
+                        ? t("phone_number")
+                        : selectedLocationType === LocationType.AttendeeInPerson
+                        ? t("Address")
+                        : ""}
                     </label>
                     <div className="mt-1">
                       <AttendeeInput<BookingFormValues>
                         control={bookingForm.control}
-                        name="phone"
+                        bookingForm={bookingForm}
+                        name={
+                          selectedLocationType === LocationType.Phone
+                            ? "phone"
+                            : selectedLocationType === LocationType.AttendeeInPerson
+                            ? "attendeeAddress"
+                            : ""
+                        }
                         placeholder={t(selectedLocation?.attendeeInputPlaceholder || "")}
-                        id="phone"
+                        id={
+                          selectedLocationType === LocationType.Phone
+                            ? "phone"
+                            : selectedLocationType === LocationType.AttendeeInPerson
+                            ? "attendeeAddress"
+                            : ""
+                        }
                         required
-                        disabled={disableInput}
                       />
                     </div>
                     {bookingForm.formState.errors.phone && (
@@ -668,8 +695,11 @@ const BookingPage = ({
                       {input.type !== EventTypeCustomInputType.BOOL && (
                         <label
                           htmlFor={"custom_" + input.id}
-                          className="mb-1 block text-sm font-medium text-gray-700 dark:text-white">
-                          {input.label}
+                          className={classNames(
+                            "mb-1 block text-sm font-medium text-gray-700 transition-colors dark:text-white",
+                            bookingForm.formState.errors.customInputs?.[input.id] && "!text-red-700"
+                          )}>
+                          {input.label} {input.required && <span className="text-red-700">*</span>}
                         </label>
                       )}
                       {input.type === EventTypeCustomInputType.TEXTLONG && (
@@ -712,23 +742,50 @@ const BookingPage = ({
                         />
                       )}
                       {input.type === EventTypeCustomInputType.BOOL && (
-                        <div className="flex h-5 items-center">
-                          <input
-                            type="checkbox"
-                            {...bookingForm.register(`customInputs.${input.id}`, {
-                              required: input.required,
-                            })}
+                        <div className="my-6">
+                          <div className="flex">
+                            <input
+                              type="checkbox"
+                              {...bookingForm.register(`customInputs.${input.id}`, {
+                                required: input.required,
+                              })}
+                              required={input.required}
+                              id={"custom_" + input.id}
+                              className="h-4 w-4 rounded border-gray-300 text-black focus:ring-black disabled:bg-gray-200 ltr:mr-2 rtl:ml-2 disabled:dark:text-gray-500"
+                              placeholder=""
+                              disabled={disabledExceptForOwner}
+                            />
+                            <label
+                              htmlFor={"custom_" + input.id}
+                              className="-mt-px block text-sm font-medium text-gray-700 dark:text-white">
+                              {input.label}
+                            </label>
+                          </div>
+                        </div>
+                      )}
+                      {input.options && input.type === EventTypeCustomInputType.RADIO && (
+                        <div className="flex">
+                          <Group
                             required={input.required}
-                            id={"custom_" + input.id}
-                            className="h-4 w-4 rounded border-gray-300 text-black focus:ring-black disabled:bg-gray-200 ltr:mr-2 rtl:ml-2 disabled:dark:text-gray-500"
-                            placeholder=""
-                            disabled={disabledExceptForOwner}
-                          />
-                          <label
-                            htmlFor={"custom_" + input.id}
-                            className="mb-1 block text-sm font-medium text-gray-700 dark:text-white">
-                            {input.label}
-                          </label>
+                            onValueChange={(e) => {
+                              bookingForm.setValue(`customInputs.${input.id}`, e);
+                            }}>
+                            <>
+                              {input.options.map((option, i) => (
+                                <RadioField
+                                  label={option.label}
+                                  key={`option.${i}.radio`}
+                                  value={option.label}
+                                  id={`option.${i}.radio`}
+                                />
+                              ))}
+                            </>
+                            {bookingForm.formState.errors.customInputs?.[input.id] && (
+                              <div className="mt-px flex items-center text-xs text-red-700 ">
+                                <p>{t("required")}</p>
+                              </div>
+                            )}
+                          </Group>
                         </div>
                       )}
                     </div>
@@ -792,7 +849,7 @@ const BookingPage = ({
                     <label
                       htmlFor="smsReminderNumber"
                       className="block text-sm font-medium text-gray-700 dark:text-white">
-                      {t("number_for_sms_reminders")}
+                      {t("number_sms_notifications")}
                     </label>
                     <div className="mt-1">
                       <PhoneInput<BookingFormValues>
@@ -800,7 +857,7 @@ const BookingPage = ({
                         name="smsReminderNumber"
                         placeholder={t("enter_phone_number")}
                         id="smsReminderNumber"
-                        required
+                        required={isSmsReminderNumberRequired}
                       />
                     </div>
                     {bookingForm.formState.errors.smsReminderNumber && (
@@ -829,6 +886,7 @@ const BookingPage = ({
                   ) : (
                     <textarea
                       {...bookingForm.register("notes")}
+                      required={!!eventType.metadata?.additionalNotesRequired}
                       id="notes"
                       name="notes"
                       rows={3}
@@ -843,7 +901,7 @@ const BookingPage = ({
                   {!eventType.disableGuests && !guestToggle && (
                     <Button
                       type="button"
-                      color="minimalSecondary"
+                      color="minimal"
                       size="icon"
                       tooltip={t("additional_guests")}
                       StartIcon={Icon.FiUserPlus}
@@ -861,7 +919,6 @@ const BookingPage = ({
                   </Button>
                   <Button
                     type="submit"
-                    className="dark:bg-darkmodebrand dark:text-darkmodebrandcontrast dark:hover:border-darkmodebrandcontrast mr-auto dark:border-transparent"
                     data-testid={rescheduleUid ? "confirm-reschedule-button" : "confirm-book-button"}
                     loading={mutation.isLoading || recurringMutation.isLoading}>
                     {rescheduleUid ? t("reschedule") : t("confirm")}
@@ -894,7 +951,7 @@ function ErrorMessage({ error }: { error: unknown }) {
         <div className="ltr:ml-3 rtl:mr-3">
           <p className="text-sm text-yellow-700">
             {rescheduleUid ? t("reschedule_fail") : t("booking_fail")}{" "}
-            {error instanceof HttpError || error instanceof Error ? error.message : "Unknown error"}
+            {error instanceof HttpError || error instanceof Error ? t(error.message) : "Unknown error"}
           </p>
         </div>
       </div>

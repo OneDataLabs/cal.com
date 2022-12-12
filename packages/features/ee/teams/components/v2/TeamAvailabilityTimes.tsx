@@ -3,9 +3,11 @@ import React from "react";
 import { ITimezone } from "react-timezone-select";
 
 import { Dayjs } from "@calcom/dayjs";
+import { useLocale } from "@calcom/lib/hooks/useLocale";
 import getSlots from "@calcom/lib/slots";
 import { trpc } from "@calcom/trpc/react";
-import { Loader } from "@calcom/ui/v2";
+
+import SkeletonLoader from "./SkeletonLoaderAvailabilityTimes";
 
 interface Props {
   teamId: number;
@@ -18,17 +20,16 @@ interface Props {
 }
 
 export default function TeamAvailabilityTimes(props: Props) {
-  const { data, isLoading } = trpc.useQuery(
-    [
-      "viewer.teams.getMemberAvailability",
-      {
-        teamId: props.teamId,
-        memberId: props.memberId,
-        dateFrom: props.selectedDate.toString(),
-        dateTo: props.selectedDate.add(1, "day").toString(),
-        timezone: `${props.selectedTimeZone.toString()}`,
-      },
-    ],
+  const { t } = useLocale();
+
+  const { data, isLoading } = trpc.viewer.teams.getMemberAvailability.useQuery(
+    {
+      teamId: props.teamId,
+      memberId: props.memberId,
+      dateFrom: props.selectedDate.toString(),
+      dateTo: props.selectedDate.add(1, "day").toString(),
+      timezone: `${props.selectedTimeZone.toString()}`,
+    },
     {
       refetchOnWindowFocus: false,
     }
@@ -47,13 +48,13 @@ export default function TeamAvailabilityTimes(props: Props) {
   return (
     <div className={classNames("min-w-60 flex-grow pl-0", props.className)}>
       {props.HeaderComponent}
-      {isLoading && times.length === 0 && <Loader />}
+      {isLoading && times.length === 0 && <SkeletonLoader />}
       {!isLoading && times.length === 0 ? (
         <div className="flex flex-col items-center justify-center pt-4">
-          <span className="text-sm text-gray-500">No Available slots</span>
+          <span className="text-sm text-gray-500">{t("no_available_slots")}</span>
         </div>
       ) : (
-        <>{!isLoading && <p className="mb-3 text-sm text-gray-600">Time available</p>}</>
+        <>{!isLoading && <p className="mb-3 text-sm text-gray-600">{t("time_available")}</p>}</>
       )}
       <div className="max-h-[390px] overflow-scroll">
         {times.map((time) => (

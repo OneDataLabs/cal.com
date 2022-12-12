@@ -1,13 +1,14 @@
 import React, { FC } from "react";
 
-import Dropdown, {
+import {
+  Button,
+  Dropdown,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuTrigger,
   DropdownMenuPortal,
-} from "@calcom/ui/Dropdown";
-import { Icon } from "@calcom/ui/Icon";
-import Button from "@calcom/ui/v2/core/Button";
+  DropdownMenuTrigger,
+  Icon,
+} from "@calcom/ui";
 
 import { SVGComponent } from "@lib/types/SVGComponent";
 
@@ -77,6 +78,7 @@ const TableActions: FC<Props> = ({ actions }) => {
         {actions.map((action) => {
           const button = (
             <Button
+              className="whitespace-nowrap"
               key={action.id}
               data-testid={action.id}
               href={action.href}

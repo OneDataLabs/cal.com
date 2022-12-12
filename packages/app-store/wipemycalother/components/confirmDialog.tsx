@@ -5,10 +5,8 @@ import { Dispatch, SetStateAction, useState } from "react";
 import dayjs from "@calcom/dayjs";
 import { useLocale } from "@calcom/lib/hooks/useLocale";
 import logger from "@calcom/lib/logger";
-import showToast from "@calcom/lib/notification";
 import { trpc } from "@calcom/trpc/react";
-import { Dialog, DialogContent, DialogFooter, DialogHeader } from "@calcom/ui/Dialog";
-import Button from "@calcom/ui/v2/core/Button";
+import { Button, Dialog, DialogContent, DialogFooter, DialogHeader, showToast } from "@calcom/ui";
 
 interface IConfirmDialogWipe {
   isOpenDialog: boolean;
@@ -73,7 +71,7 @@ export const ConfirmDialog = (props: IConfirmDialogWipe) => {
     },
     {
       async onSettled() {
-        await utils.invalidateQueries(["viewer.bookings"]);
+        await utils.viewer.bookings.invalidate();
       },
     }
   );

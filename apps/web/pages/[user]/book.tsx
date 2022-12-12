@@ -12,6 +12,7 @@ import {
 import { useLocale } from "@calcom/lib/hooks/useLocale";
 import { bookEventTypeSelect } from "@calcom/prisma";
 import prisma from "@calcom/prisma";
+import { customInputSchema, EventTypeMetaDataSchema } from "@calcom/prisma/zod-utils";
 
 import { asStringOrNull, asStringOrThrow } from "@lib/asStringOrNull";
 import getBooking, { GetBookingType } from "@lib/getBooking";
@@ -122,7 +123,7 @@ export async function getServerSideProps(context: GetServerSidePropsContext) {
 
   const eventType = {
     ...eventTypeRaw,
-    metadata: (eventTypeRaw.metadata || {}) as JSONObject,
+    metadata: EventTypeMetaDataSchema.parse(eventTypeRaw.metadata || {}),
     recurringEvent: parseRecurringEvent(eventTypeRaw.recurringEvent),
   };
 
@@ -135,6 +136,7 @@ export async function getServerSideProps(context: GetServerSidePropsContext) {
       periodStartDate: e.periodStartDate?.toString() ?? null,
       periodEndDate: e.periodEndDate?.toString() ?? null,
       schedulingType: null,
+      customInputs: customInputSchema.array().parse(e.customInputs || []),
       users: users
         .sort((a, b) => usernameList.indexOf(b.username) - usernameList.indexOf(a.username))
         .map((u) => ({
@@ -202,6 +204,7 @@ export async function getServerSideProps(context: GetServerSidePropsContext) {
       isDynamicGroupBooking,
       hasHashedBookingLink: false,
       hashedLink: null,
+      isEmbed: typeof context.query.embed === "string",
     },
   };
 }

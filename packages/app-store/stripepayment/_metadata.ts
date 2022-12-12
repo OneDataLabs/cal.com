@@ -23,8 +23,10 @@ export const metadata = {
   url: "https://cal.com/",
   docsUrl: "https://stripe.com/docs",
   variant: "payment",
+  extendsFeature: "EventType",
   verified: true,
   email: "help@cal.com",
+  dirName: "stripepayment",
 } as AppMeta;
 
 export default metadata;

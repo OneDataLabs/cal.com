@@ -1,12 +1,18 @@
 import { Prisma } from "@prisma/client";
 import { TFunction } from "next-i18next";
+import { z } from "zod";
 
-import { defaultLocations, EventLocationType, LocationType } from "@calcom/app-store/locations";
+import { defaultLocations, EventLocationType } from "@calcom/app-store/locations";
+import { EventTypeModel } from "@calcom/prisma/zod";
+import { EventTypeMetaDataSchema } from "@calcom/prisma/zod-utils";
 import type { App, AppMeta } from "@calcom/types/App";
 
 // If you import this file on any app it should produce circular dependency
 // import appStore from "./index";
-import { appStoreMetadata } from "./apps.browser.generated";
+import { appStoreMetadata } from "./apps.metadata.generated";
+
+export type EventTypeApps = NonNullable<NonNullable<z.infer<typeof EventTypeMetaDataSchema>>["apps"]>;
+export type EventTypeAppsList = keyof EventTypeApps;
 
 const ALL_APPS_MAP = Object.keys(appStoreMetadata).reduce((store, key) => {
   store[key] = appStoreMetadata[key as keyof typeof appStoreMetadata];
@@ -20,15 +26,17 @@ const ALL_APPS_MAP = Object.keys(appStoreMetadata).reduce((store, key) => {
 }, {} as Record<string, AppMeta>);
 
 const credentialData = Prisma.validator<Prisma.CredentialArgs>()({
-  select: { id: true, type: true, key: true, userId: true, appId: true },
+  select: { id: true, type: true, key: true, userId: true, appId: true, invalid: true },
 });
 
-type CredentialData = Prisma.CredentialGetPayload<typeof credentialData>;
+export type CredentialData = Prisma.CredentialGetPayload<typeof credentialData>;
 
 export enum InstalledAppVariants {
   "conferencing" = "conferencing",
   "calendar" = "calendar",
   "payment" = "payment",
+  "analytics" = "analytics",
+  "automation" = "automation",
   "other" = "other",
 }
 
@@ -64,6 +72,62 @@ export function getLocationOptions(integrations: ReturnType<typeof getApps>, t: 
   return translateLocations(locations, t);
 }
 
+export function getLocationGroupedOptions(integrations: ReturnType<typeof getApps>, t: TFunction) {
+  const apps: Record<string, { label: string; value: string; disabled?: boolean; icon?: string }[]> = {};
+  integrations.forEach((app) => {
+    if (app.locationOption) {
+      const category = app.category;
+      const option = { ...app.locationOption, icon: app.imageSrc };
+      if (apps[category]) {
+        apps[category] = [...apps[category], option];
+      } else {
+        apps[category] = [option];
+      }
+    }
+  });
+
+  defaultLocations.forEach((l) => {
+    const category = l.category;
+    if (apps[category]) {
+      apps[category] = [
+        ...apps[category],
+        {
+          label: l.label,
+          value: l.type,
+          icon: l.iconUrl,
+        },
+      ];
+    } else {
+      apps[category] = [
+        {
+          label: l.label,
+          value: l.type,
+          icon: l.iconUrl,
+        },
+      ];
+    }
+  });
+  const locations = [];
+
+  // Translating labels and pushing into array
+  for (const category in apps) {
+    const tmp = { label: category, options: apps[category] };
+    if (tmp.label === "in person") {
+      tmp.options.map((l) => ({ ...l, label: t(l.value) }));
+    } else {
+      tmp.options.map((l) => ({
+        ...l,
+        label: t(l.label.toLowerCase().split(" ").join("_")),
+      }));
+    }
+
+    tmp.label = t(tmp.label);
+
+    locations.push(tmp);
+  }
+  return locations;
+}
+
 /**
  * This should get all available apps to the user based on his saved
  * credentials, this should also get globally available apps.
@@ -78,9 +142,11 @@ function getApps(userCredentials: CredentialData[]) {
       credentials.push({
         id: +new Date().getTime(),
         type: appMeta.type,
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
         key: appMeta.key!,
         userId: +new Date().getTime(),
         appId: appMeta.slug,
+        invalid: false,
       });
     }
 
@@ -109,6 +175,10 @@ function getApps(userCredentials: CredentialData[]) {
   return apps;
 }
 
+export function getLocalAppMetadata() {
+  return ALL_APPS;
+}
+
 export function hasIntegrationInstalled(type: App["type"]): boolean {
   return ALL_APPS.some((app) => app.type === type && !!app.installed);
 }
@@ -128,5 +198,45 @@ export function getAppType(name: string): string {
   }
   return "Unknown";
 }
+
+export const getEventTypeAppData = <T extends EventTypeAppsList>(
+  eventType: Pick<z.infer<typeof EventTypeModel>, "price" | "currency" | "metadata">,
+  appId: T,
+  forcedGet?: boolean
+): EventTypeApps[T] => {
+  const metadata = eventType.metadata;
+  const appMetadata = metadata?.apps && metadata.apps[appId];
+  if (appMetadata) {
+    const allowDataGet = forcedGet ? true : appMetadata.enabled;
+    return allowDataGet ? appMetadata : null;
+  }
+
+  // Backward compatibility for existing event types.
+  // TODO: After the new AppStore EventType App flow is stable, write a migration to migrate metadata to new format which will let us remove this compatibility code
+  // Migration isn't being done right now, to allow a revert if needed
+  const legacyAppsData = {
+    stripe: {
+      enabled: eventType.price > 0,
+      // Price default is 0 in DB. So, it would always be non nullish.
+      price: eventType.price,
+      // Currency default is "usd" in DB.So, it would also be available always
+      currency: eventType.currency,
+    },
+    rainbow: {
+      enabled: !!(eventType.metadata?.smartContractAddress && eventType.metadata?.blockchainId),
+      smartContractAddress: eventType.metadata?.smartContractAddress || "",
+      blockchainId: eventType.metadata?.blockchainId || 0,
+    },
+    giphy: {
+      enabled: !!eventType.metadata?.giphyThankYouPage,
+      thankYouPage: eventType.metadata?.giphyThankYouPage || "",
+    },
+  } as const;
+
+  // TODO: This assertion helps typescript hint that only one of the app's data can be returned
+  const legacyAppData = legacyAppsData[appId as Extract<T, keyof typeof legacyAppsData>];
+  const allowDataGet = forcedGet ? true : legacyAppData?.enabled;
+  return allowDataGet ? legacyAppData : null;
+};
 
 export default getApps;

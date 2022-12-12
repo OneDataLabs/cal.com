@@ -1,13 +1,22 @@
 // TODO: i18n
+import { serverSideTranslations } from "next-i18next/serverSideTranslations";
+
 import useApp from "@calcom/lib/hooks/useApp";
 import { useLocale } from "@calcom/lib/hooks/useLocale";
+import { trpc } from "@calcom/trpc/react";
 import { AppGetServerSidePropsContext, AppPrisma, AppUser } from "@calcom/types/AppGetServerSideProps";
-import { Icon } from "@calcom/ui/Icon";
-import { ButtonGroup, DropdownMenuSeparator, Tooltip } from "@calcom/ui/v2";
-import { EmptyScreen } from "@calcom/ui/v2";
-import { Badge } from "@calcom/ui/v2";
-import { List, ListLinkItem } from "@calcom/ui/v2/core/List";
-import Shell, { ShellMain } from "@calcom/ui/v2/core/Shell";
+import {
+  Badge,
+  ButtonGroup,
+  DropdownMenuSeparator,
+  EmptyScreen,
+  Icon,
+  List,
+  ListLinkItem,
+  Shell,
+  ShellMain,
+  Tooltip,
+} from "@calcom/ui";
 
 import { inferSSRProps } from "@lib/types/inferSSRProps";
 
@@ -15,10 +24,14 @@ import { FormAction, FormActionsDropdown, FormActionsProvider } from "../../comp
 import { getSerializableForm } from "../../lib/getSerializableForm";
 
 export default function RoutingForms({
-  forms,
+  forms: forms_,
   appUrl,
 }: inferSSRProps<typeof getServerSideProps> & { appUrl: string }) {
   const { t } = useLocale();
+  const { data: forms } = trpc.viewer.appRoutingForms.forms.useQuery(undefined, {
+    initialData: forms_,
+  });
+
   const { data: typeformApp } = useApp("typeform");
 
   function NewFormButton() {
@@ -33,7 +46,7 @@ export default function RoutingForms({
       <FormActionsProvider appUrl={appUrl}>
         <div className="-mx-4 md:-mx-8">
           <div className="mb-10 w-full px-4 pb-2 sm:px-6 md:px-8">
-            {!forms.length ? (
+            {!forms?.length ? (
               <EmptyScreen
                 Icon={Icon.FiGitMerge}
                 headline={t("create_your_first_form")}
@@ -41,7 +54,7 @@ export default function RoutingForms({
                 buttonRaw={<NewFormButton />}
               />
             ) : null}
-            {forms.length ? (
+            {forms?.length ? (
               <div className="mb-16 overflow-hidden bg-white">
                 <List data-testid="routing-forms-list">
                   {forms.map((form, index) => {
@@ -71,7 +84,6 @@ export default function RoutingForms({
                                   target="_blank"
                                   StartIcon={Icon.FiExternalLink}
                                   color="secondary"
-                                  combined
                                   size="icon"
                                   disabled={disabled}
                                 />
@@ -80,7 +92,6 @@ export default function RoutingForms({
                                 routingForm={form}
                                 action="copyLink"
                                 color="secondary"
-                                combined
                                 size="icon"
                                 StartIcon={Icon.FiLink}
                                 disabled={disabled}
@@ -91,6 +102,7 @@ export default function RoutingForms({
                                   action="edit"
                                   routingForm={form}
                                   color="minimal"
+                                  className="!flex"
                                   StartIcon={Icon.FiEdit}>
                                   {t("edit")}
                                 </FormAction>
@@ -117,7 +129,7 @@ export default function RoutingForms({
                                   StartIcon={Icon.FiCopy}>
                                   {t("duplicate")}
                                 </FormAction>
-                                {typeformApp ? (
+                                {typeformApp?.isInstalled ? (
                                   <FormAction
                                     routingForm={form}
                                     action="copyRedirectUrl"
@@ -201,6 +213,7 @@ export const getServerSideProps = async function getServerSideProps(
 
   return {
     props: {
+      ...(await serverSideTranslations(context.locale ?? "", ["common"])),
       forms: serializableForms,
     },
   };

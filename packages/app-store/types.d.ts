@@ -1,5 +1,9 @@
-import { ButtonBaseProps } from "@calcom/ui/Button";
-import { ButtonBaseProps as v2ButtonBaseProps } from "@calcom/ui/v2/core/Button";
+import React from "react";
+import { z } from "zod";
+
+import { _EventTypeModel } from "@calcom/prisma/zod";
+import { RouterOutputs } from "@calcom/trpc/react";
+import { ButtonProps } from "@calcom/ui";
 
 export type IntegrationOAuthCallbackState = {
   returnTo: string;
@@ -7,13 +11,21 @@ export type IntegrationOAuthCallbackState = {
 
 export interface InstallAppButtonProps {
   render: (
-    renderProps:
-      | Omit<ButtonBaseProps, "color" | "size"> & {
-          /** Tells that the default render component should be used */
-          useDefaultComponent?: boolean;
-          color?: ButtonBaseProps["color"] & v2ButtonBaseProps["color"];
-          size?: ButtonBaseProps["size"] & v2ButtonBaseProps["size"];
-        }
+    renderProps: ButtonProps & {
+      /** Tells that the default render component should be used */
+      useDefaultComponent?: boolean;
+    }
   ) => JSX.Element;
   onChanged?: () => unknown;
 }
+export type EventTypeAppCardComponentProps = {
+  // Limit what data should be accessible to apps
+  eventType: Pick<
+    z.infer<typeof _EventTypeModel>,
+    "id" | "title" | "description" | "teamId" | "length" | "recurringEvent"
+  > & {
+    URL: string;
+  };
+  app: RouterOutputs["viewer"]["apps"][number];
+};
+export type EventTypeAppCardComponent = React.FC<EventTypeAppCardComponentProps>;

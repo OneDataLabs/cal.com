@@ -1,6 +1,6 @@
-import { useRouter } from "next/router";
 import type { NextRouter } from "next/router";
-import { useState, createContext, useContext, forwardRef } from "react";
+import { useRouter } from "next/router";
+import { createContext, forwardRef, useContext, useState } from "react";
 import { useForm } from "react-hook-form";
 import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
@@ -9,22 +9,24 @@ import { classNames } from "@calcom/lib";
 import { CAL_URL } from "@calcom/lib/constants";
 import { useLocale } from "@calcom/lib/hooks/useLocale";
 import { trpc } from "@calcom/trpc/react";
-import { Icon } from "@calcom/ui";
-import ConfirmationDialogContent from "@calcom/ui/ConfirmationDialogContent";
-import { Dialog, DialogClose, DialogContent } from "@calcom/ui/Dialog";
 import {
   Button,
   ButtonProps,
+  ConfirmationDialogContent,
+  Dialog,
+  DialogClose,
+  DialogContent,
   Dropdown,
-  DropdownMenuItem,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuTrigger,
   Form,
+  Icon,
   showToast,
   Switch,
-  TextField,
   TextAreaField,
-} from "@calcom/ui/v2";
+  TextField,
+} from "@calcom/ui";
 
 import { EmbedButton, EmbedDialog } from "@components/Embed";
 
@@ -60,13 +62,15 @@ function NewFormDialog({ appUrl }: { appUrl: string }) {
   const router = useRouter();
   const utils = trpc.useContext();
 
-  const mutation = trpc.useMutation("viewer.app_routing_forms.formMutation", {
+  const mutation = trpc.viewer.appRoutingForms.formMutation.useMutation({
     onSuccess: (_data, variables) => {
-      utils.invalidateQueries("viewer.app_routing_forms.forms");
       router.push(`${appUrl}/form-edit/${variables.id}`);
     },
     onError: () => {
       showToast(`Something went wrong`, "error");
+    },
+    onSettled: () => {
+      utils.viewer.appRoutingForms.forms.invalidate();
     },
   });
 
@@ -116,9 +120,7 @@ function NewFormDialog({ appUrl }: { appUrl: string }) {
             <Button loading={mutation.isLoading} data-testid="add-form" type="submit">
               {t("continue")}
             </Button>
-            <DialogClose asChild>
-              <Button color="secondary">{t("cancel")}</Button>
-            </DialogClose>
+            <DialogClose />
           </div>
         </Form>
       </DialogContent>
@@ -137,9 +139,8 @@ export const FormActionsDropdown = ({ form, children }: { form: RoutingForm; chi
           <Button
             type="button"
             size="icon"
-            combined
             color="secondary"
-            className={classNames(disabled && " opacity-30")}
+            className={classNames("radix-state-open:rounded-r-md", disabled && "opacity-30")}
             StartIcon={Icon.FiMoreHorizontal}
           />
         </DropdownMenuTrigger>
@@ -162,17 +163,29 @@ function Dialogs({
 }) {
   const utils = trpc.useContext();
   const router = useRouter();
-  const deleteMutation = trpc.useMutation("viewer.app_routing_forms.deleteForm", {
+  const deleteMutation = trpc.viewer.appRoutingForms.deleteForm.useMutation({
+    onMutate: async ({ id: formId }) => {
+      await utils.viewer.appRoutingForms.forms.cancel();
+      const previousValue = utils.viewer.appRoutingForms.forms.getData();
+      if (previousValue) {
+        const filtered = previousValue.filter(({ id }) => id !== formId);
+        utils.viewer.appRoutingForms.forms.setData(undefined, filtered);
+      }
+      return { previousValue };
+    },
     onSuccess: () => {
       showToast("Form deleted", "success");
       setDeleteDialogOpen(false);
       router.replace(`${appUrl}/forms`);
     },
     onSettled: () => {
-      utils.invalidateQueries(["viewer.app_routing_forms.forms"]);
+      utils.viewer.appRoutingForms.forms.invalidate();
       setDeleteDialogOpen(false);
     },
-    onError: () => {
+    onError: (err, newTodo, context) => {
+      if (context?.previousValue) {
+        utils.viewer.appRoutingForms.forms.setData(undefined, context.previousValue);
+      }
       showToast("Something went wrong", "error");
     },
   });
@@ -221,14 +234,31 @@ const actionsCtx = createContext({
 export function FormActionsProvider({ appUrl, children }: { appUrl: string; children: React.ReactNode }) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteDialogFormId, setDeleteDialogFormId] = useState<string | null>(null);
-  const router = useRouter();
+  const utils = trpc.useContext();
 
-  const toggleMutation = trpc.useMutation("viewer.app_routing_forms.formMutation", {
-    onError: () => {
-      showToast(`Something went wrong`, "error");
+  const toggleMutation = trpc.viewer.appRoutingForms.formMutation.useMutation({
+    onMutate: async ({ id: formId, disabled }) => {
+      await utils.viewer.appRoutingForms.forms.cancel();
+      const previousValue = utils.viewer.appRoutingForms.forms.getData();
+      if (previousValue) {
+        const itemIndex = previousValue.findIndex(({ id }) => id === formId);
+        const prevValueTemp = [...previousValue];
+
+        if (itemIndex !== -1 && prevValueTemp[itemIndex] && disabled !== undefined) {
+          prevValueTemp[itemIndex].disabled = disabled;
+        }
+        utils.viewer.appRoutingForms.forms.setData(undefined, prevValueTemp);
+      }
+      return { previousValue };
     },
-    onSuccess: () => {
-      router.replace(router.asPath);
+    onSettled: () => {
+      utils.viewer.appRoutingForms.forms.invalidate();
+    },
+    onError: (err, value, context) => {
+      if (context?.previousValue) {
+        utils.viewer.appRoutingForms.forms.setData(undefined, context.previousValue);
+      }
+      showToast("Something went wrong", "error");
     },
   });
 

@@ -65,5 +65,83 @@
     "categories": ["calendar"],
     "slug": "exchange",
     "type": "exchange_calendar"
+  },
+  {
+    "dirName": "qr_code",
+    "categories": ["other"],
+    "slug": "qr_code",
+    "type": "qr_code_other"
+  },
+  {
+    "dirName": "weather_in_your_calendar",
+    "categories": ["other"],
+    "slug": "weather_in_your_calendar",
+    "type": "weather_in_your_calendar_other"
+  },
+  {
+    "dirName": "fathom",
+    "categories": ["analytics"],
+    "slug": "fathom",
+    "type": "fathom_analytics"
+  },
+  {
+    "dirName": "plausible",
+    "categories": ["analytics"],
+    "slug": "plausible",
+    "type": "plausible_analytics"
+  },
+  {
+    "dirName": "wordpress",
+    "categories": ["other"],
+    "slug": "wordpress",
+    "type": "wordpress_other"
+  },
+  {
+    "dirName": "ga4",
+    "categories": ["analytics"],
+    "slug": "ga4",
+    "type": "ga4_analytics"
+  },
+  {
+    "dirName": "pipedream",
+    "categories": ["automation"],
+    "slug": "pipedream",
+    "type": "pipedream_automation"
+  },
+  {
+    "dirName": "sirius_video",
+    "categories": ["video"],
+    "slug": "sirius_video",
+    "type": "sirius_video_video"
+  },
+  {
+    "dirName": "sendgrid",
+    "categories": ["other"],
+    "slug": "sendgrid",
+    "type": "sendgrid_other_calendar"
+  },
+  {
+    "dirName": "closecom",
+    "categories": ["other"],
+    "slug": "closecom",
+    "type": "closecom_other_calendar"
+  },
+  {
+    "dirName": "whatsapp",
+    "categories": ["video"],
+    "slug": "whatsapp",
+    "type": "whatsapp_video"
+  },
+  {
+    "dirName": "telegram",
+    "categories": ["video"],
+    "slug": "telegram",
+    "type": "telegram_video"
+  },
+  {
+    "dirName": "signal",
+    "categories": ["video"],
+    "slug": "signal",
+    "type": "signal_video"
   }
 ]

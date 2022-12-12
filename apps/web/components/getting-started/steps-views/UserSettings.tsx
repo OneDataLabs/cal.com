@@ -1,74 +1,58 @@
 import { ArrowRightIcon } from "@heroicons/react/outline";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 
 import dayjs from "@calcom/dayjs";
 import { useLocale } from "@calcom/lib/hooks/useLocale";
-import { User } from "@calcom/prisma/client";
 import { trpc } from "@calcom/trpc/react";
-import TimezoneSelect from "@calcom/ui/form/TimezoneSelect";
-import { Button } from "@calcom/ui/v2";
+import { Button, TimezoneSelect } from "@calcom/ui";
 
-import { UsernameAvailability } from "@components/ui/UsernameAvailability";
+import { UsernameAvailabilityField } from "@components/ui/UsernameAvailability";
+
+import type { IOnboardingPageProps } from "../../../pages/getting-started/[[...step]]";
 
 interface IUserSettingsProps {
-  user: User;
+  user: IOnboardingPageProps["user"];
   nextStep: () => void;
 }
-
-type FormData = {
-  name: string;
-};
 
 const UserSettings = (props: IUserSettingsProps) => {
   const { user, nextStep } = props;
   const { t } = useLocale();
   const [selectedTimeZone, setSelectedTimeZone] = useState(user.timeZone ?? dayjs.tz.guess());
-  const { register, handleSubmit, formState } = useForm<FormData>({
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm({
     defaultValues: {
-      name: user?.name || undefined,
+      name: user?.name || "",
     },
     reValidateMode: "onChange",
   });
-  const { errors } = formState;
   const defaultOptions = { required: true, maxLength: 255 };
 
   const utils = trpc.useContext();
   const onSuccess = async () => {
-    await utils.invalidateQueries(["viewer.me"]);
+    await utils.viewer.me.invalidate();
     nextStep();
   };
-  const mutation = trpc.useMutation("viewer.updateProfile", {
+  const mutation = trpc.viewer.updateProfile.useMutation({
     onSuccess: onSuccess,
   });
-  const { data: stripeCustomer } = trpc.useQuery(["viewer.stripeCustomer"]);
-  const paymentRequired = stripeCustomer?.isPremium ? !stripeCustomer?.paidForPremium : false;
+
   const onSubmit = handleSubmit((data) => {
-    if (paymentRequired) {
-      return;
-    }
     mutation.mutate({
       name: data.name,
       timeZone: selectedTimeZone,
     });
   });
-  const [currentUsername, setCurrentUsername] = useState(user.username || undefined);
-  const [inputUsernameValue, setInputUsernameValue] = useState(currentUsername);
-  const usernameRef = useRef<HTMLInputElement>(null!);
 
   return (
     <form onSubmit={onSubmit}>
       <div className="space-y-6">
         {/* Username textfield */}
-        <UsernameAvailability
-          readonly={true}
-          currentUsername={currentUsername}
-          setCurrentUsername={setCurrentUsername}
-          inputUsernameValue={inputUsernameValue}
-          usernameRef={usernameRef}
-          setInputUsernameValue={setInputUsernameValue}
-          user={user}
-        />
+        <UsernameAvailabilityField user={user} />
 
         {/* Full name textfield */}
         <div className="w-full">

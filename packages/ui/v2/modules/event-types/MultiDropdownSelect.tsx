@@ -1,10 +1,7 @@
-import autoAnimate from "@formkit/auto-animate";
-import React, { useEffect, useRef } from "react";
 import { components, GroupBase, Props, ValueContainerProps } from "react-select";
 
-import { Icon } from "@calcom/ui/Icon";
-
 import { Select } from "../..";
+import { Icon } from "../../..";
 
 const LimitedChipsContainer = <Option, IsMulti extends boolean, Group extends GroupBase<Option>>({
   children,
@@ -37,11 +34,6 @@ const LimitedChipsContainer = <Option, IsMulti extends boolean, Group extends Gr
 
 export const MultiDropdownSelect = ({ options = [], value = [], ...props }: Props) => {
   // const { t } = useLocale();
-  const animationRef = useRef(null);
-
-  useEffect(() => {
-    animationRef.current && autoAnimate(animationRef.current);
-  }, [animationRef]);
 
   return (
     <Select

@@ -1,7 +1,7 @@
-import type { EventTypeCustomInput } from "@prisma/client";
-import { PeriodType, Prisma, SchedulingType, UserPlan } from "@prisma/client";
+import { PeriodType, Prisma, SchedulingType } from "@prisma/client";
 
 import { userSelect } from "@calcom/prisma/selects";
+import { CustomInputSchema, EventTypeMetaDataSchema } from "@calcom/prisma/zod-utils";
 
 type User = Prisma.UserGetPayload<typeof userSelect>;
 
@@ -14,7 +14,6 @@ type UsernameSlugLinkProps = {
     bio?: string | null;
     avatar?: string | null;
     theme?: string | null;
-    plan?: UserPlan;
     away?: boolean;
     verified?: boolean | null;
     allowDynamicBooking?: boolean | null;
@@ -40,14 +39,13 @@ const user: User = {
   name: "John doe",
   avatar: "",
   destinationCalendar: null,
-  plan: UserPlan.PRO,
   hideBranding: true,
   brandColor: "#797979",
   darkBrandColor: "#efefef",
   allowDynamicBooking: true,
 };
 
-const customInputs: EventTypeCustomInput[] = [];
+const customInputs: CustomInputSchema[] = [];
 
 const commons = {
   isDynamic: true,
@@ -73,17 +71,19 @@ const commons = {
   currency: "usd",
   schedulingType: SchedulingType.COLLECTIVE,
   seatsPerTimeSlot: null,
+  seatsShowAttendees: null,
   id: 0,
   hideCalendarNotes: false,
   recurringEvent: null,
   destinationCalendar: null,
   team: null,
   requiresConfirmation: false,
+  bookingLimits: null,
   hidden: false,
   userId: 0,
   workflows: [],
   users: [user],
-  metadata: {},
+  metadata: EventTypeMetaDataSchema.parse({}),
 };
 
 const min15Event = {
@@ -169,7 +169,7 @@ export const getUsernameList = (users: string | string[] | undefined): string[] 
 
   const allUsers = users.map((user) =>
     user
-      .toLowerCase()
+      //.toLowerCase() // This was causing 404s for mixed-case usernames
       .replace(/( |%20)/g, "+")
       .split("+")
   );
